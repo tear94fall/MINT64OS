@@ -18,7 +18,7 @@
 #define PAGE_FLAGS_DEFAULT      ( PAGE_FLAGS_P | PAGE_FLAGS_RW )
 #define PAGE_TABLESIZE          0x1000
 #define PAGE_MAXENTRYCOUNT      512
-#define PAGE_DEFAULTSIZE        0x20000000
+#define PAGE_DEFAULTSIZE        0x200000
 
 // 구조체
 #pragma pack( push , 1 )

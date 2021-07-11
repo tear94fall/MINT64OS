@@ -24,7 +24,7 @@ void kInitializePageTables( void )
     pstPDPTEntry = ( PDPTENTRY* ) 0x101000;
     for ( i = 0 ; i < 64 ; i ++ )
     {
-        kSetPageEntryData( &( pstPDPTEntry[ i ] ), 0, 0x10200 + ( i * PAGE_TABLESIZE ), PAGE_FLAGS_DEFAULT, 0 );
+        kSetPageEntryData( &( pstPDPTEntry[ i ] ), 0, 0x102000 + ( i * PAGE_TABLESIZE ), PAGE_FLAGS_DEFAULT, 0 );
     }
 
     for ( i = 64 ; i < PAGE_MAXENTRYCOUNT ; i++ )
@@ -37,11 +37,11 @@ void kInitializePageTables( void )
     // 여유 있게 64개의 페이지 디렉터리를 생성하여 총 64GB까지 지원
     pstPDEntry = (PDENTRY* ) 0x102000;
     dwMappingAddress = 0;
-    for ( i = 0 ; i <PAGE_MAXENTRYCOUNT *64 ; i ++ )
+    for ( i = 0 ; i < PAGE_MAXENTRYCOUNT * 64 ; i ++ )
     {
         // 32비트로는 상위 어드레스를 표현할 수 없으므로, MB 단위로 계산한 다음
         // 최종 결과를 다시 4KB로 나누어 32비트 이상의 어드레스를 계산함
-        kSetPageEntryData( &( pstPDEntry[ i ] ), ( i * ( PAGE_MAXENTRYCOUNT >> 20 ) ) >> 12,
+        kSetPageEntryData( &( pstPDEntry[ i ] ), ( i * ( PAGE_DEFAULTSIZE >> 20 ) ) >> 12,
                 dwMappingAddress, PAGE_FLAGS_DEFAULT | PAGE_FLAGS_PS, 0 );
         dwMappingAddress += PAGE_DEFAULTSIZE;
     }
