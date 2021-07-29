@@ -66,7 +66,7 @@
 
 // 실제로 사용할 매크로
 #define IDT_FLAGS_KERNEL        ( IDT_FLAGS_DPL0 | IDT_FLAGS_P )
-#define ITD_LFAGS_USER          ( IDT_FLAGS_DPL3 | IDT_FLAGS_P )
+#define IDT_LFAGS_USER          ( IDT_FLAGS_DPL3 | IDT_FLAGS_P )
 
 // 기타 IDT에 관련된 매크로
 // IDT 엔트리의 개수
@@ -76,7 +76,7 @@
 // IDT 테이블의 시작 어드레스
 #define IDT_STARTADDRESS        ( IDTR_STARTADDRESS + sizeof( IDTR ) )
 // IDT 테이블의 전체 크기
-#define IDT_TABLESIZE           ( IDT_MAXENTRYCOUNT + sizeof( IDTENTRY ) )
+#define IDT_TABLESIZE           ( IDT_MAXENTRYCOUNT * sizeof( IDTENTRY ) )
 
 // IST의 시작 어드레스
 #define IST_STARTADDRESS        0x700000
@@ -93,7 +93,7 @@ typedef struct kGDTRStruct
     WORD wLimit;
     QWORD qwBaseAddress;
     // 16바이트 어드레스 정렬을 위해 추가
-    WORD wPaing;
+    WORD wPading;
     DWORD dwPading;
 } GDTR, IDTR;
 
@@ -155,7 +155,7 @@ typedef struct kIDTEntryStruct
 
 // 함수
 void kInitializeGDTTableAndTSS( void );
-void kSetGDTEntry8( GDTENTRY8* pstEntry, DWORD dwBaseAddress, DWORD dwLimit, BYTE bUpperFlags, BYTE bLowerFLags, BYTE bType );
+void kSetGDTEntry8( GDTENTRY8* pstEntry, DWORD dwBaseAddress, DWORD dwLimit, BYTE bUpperFlags, BYTE bLowerFlags, BYTE bType );
 void kSetGDTEntry16( GDTENTRY16* pstEntry, QWORD qwBaseAddress, DWORD dwLimit, BYTE bUpperFlags, BYTE bLowerFlags, BYTE bType );
 void kInitializeTSSSegment( TSSSEGMENT* pstTSS );
 
