@@ -76,9 +76,9 @@ void* kRemoveList( LIST* pstList, QWORD qwID )
     for( pstLink = pstPreviousLink ; pstLink != NULL ; pstLink = pstLink->pvNext )
     {
         // 일치하는 ID가 있다면 제거
-        if( pstLink->qwID )
+        if( pstLink->qwID == qwID )
         {
-            // 만약 데이터가 하나박에 없다면 리스트 초기화
+            // 만약 데이터가 하나 밖에 없다면 리스트 초기화
             if( ( pstLink == pstList->pvHeader ) && ( pstLink == pstList->pvTail ) )
             {
                 pstList->pvHeader = NULL;
@@ -88,6 +88,10 @@ void* kRemoveList( LIST* pstList, QWORD qwID )
             else if( pstLink == pstList->pvHeader )
             {
                 pstList->pvHeader = pstLink->pvNext;
+            }
+            else if( pstLink == pstList->pvTail )
+            {
+                pstList->pvTail = pstPreviousLink;
             }
             else
             {

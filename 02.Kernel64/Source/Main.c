@@ -45,7 +45,7 @@ void Main( void )
     kSetCursor( 45, iCursorY++ );
     kPrintf( "pass], size = %d MB \n", kGetTotalRAMSize() );
 
-    kPrintf( "TCB Pool And Scheduler Initialize...........[Pass]" );
+    kPrintf( "TCB Pool And Scheduler Initialize...........[Pass]\n" );
     iCursorY++;
     kInitializeScheduler();
     // 1ms당 한 번씩 인터럽트가 발생하도록 설정
@@ -76,6 +76,7 @@ void Main( void )
     kPrintf( "Pass\n" );
 
     // 쉘을 시작
+    kCreateTask( TASK_FLAGS_LOWEST | TASK_FLAGS_IDLE, ( QWORD ) kIdleTask );
     kStartConsoleShell();
 }
 

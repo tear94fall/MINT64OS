@@ -75,7 +75,7 @@ void kKeyboardHandler( int iVectorNumber )
 //  타이머 인터럽트의 핸들러
 void kTimerHandler( int iVectorNumber )
 {
-    char vcBuffer[] = "[INT:   , ]";
+    char vcBuffer[] = "[INT:  , ]";
     static int g_iTimerInterruptCount = 0;
 
     //==============================================================================
