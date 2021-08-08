@@ -6,7 +6,7 @@ SECTION .text           ; text 섹션(세그먼트)을 정의
 global kInPortByte, kOutPortByte, kLoadGDTR, kLoadTR, kLoadIDTR
 global kEnableInterrupt, kDisableInterrupt, kReadRFLAGS
 global kReadTSC
-global kSwitchContext, kHlt
+global kSwitchContext, kHlt, kTestAndSet
 
 ; 포트로부터 1바이트를 읽음
 ;   PARAM: 포트 번호
@@ -211,4 +211,24 @@ kSwitchContext:
 kHlt:
     hlt     ; 프로세스를 대기 상태로 진입시킴
     hlt
+    ret
+
+; 테스트와 설정을 하나의 명령으로 처리
+;       Destination과 Compare를 비교하여 같다면, Destination에 Source 값을 삽입
+;   PARAM: 값을 저장할 어드레스(Destination, rdi), 비교할 값(Compare, rsi), 
+;           설정할 값(Source, rdx)
+kTestAndSet:
+    mov rax, rsi        ; 두 번째 파라미터인 비교할 값을 RAX 레지스터에 저장
+
+    ; RAX 레지스터에 저장된 비교할 값과 첫 번째 파라미터의 메모리 어드레스의 값을 비교하여
+    ; 두 값이 같다면 세 번째 파라미터의 값을 첫 번째 파라미터가 가리키는 어드레스에 삽입
+    lock cmpxchg byte [ rdi ], dl
+    je .SUCCESS         ; ZF 비트가 1이면 같다는 뜻이므로 .SUCCESS로 이동
+
+.NOTSAME:               ; Destination과 Compare가 다른 경우
+    mov rax, 0x00
+    ret
+
+.SUCCESS:               ; Destination과 Compare가 같은 경우
+    mov rax, 0x01
     ret

@@ -7,9 +7,6 @@
 #include "Task.h"
 #include "PIT.h"
 
-// 함수 선언
-void kPrintString( int iX, int iY, const char *pcString );
-
 // 아래 함수는 C 언어 커널의 시작 부분임
 void Main( void )
 {
@@ -34,7 +31,7 @@ void Main( void )
     kSetCursor( 45, iCursorY++ );
     kPrintf( "Pass\n" );
 
-    kPrintf( "IDT Initailize..............................[    ]" );
+    kPrintf( "IDT Initialize..............................[    ]" );
     kInitializeIDTTables();
     kLoadIDTR( IDTR_STARTADDRESS );
     kSetCursor( 45, iCursorY++ );
@@ -43,7 +40,7 @@ void Main( void )
     kPrintf( "Total RAM Size Check........................[    ]" );
     kCheckTotalRAMSize();
     kSetCursor( 45, iCursorY++ );
-    kPrintf( "pass], size = %d MB \n", kGetTotalRAMSize() );
+    kPrintf( "Pass], Size = %d MB\n", kGetTotalRAMSize() );
 
     kPrintf( "TCB Pool And Scheduler Initialize...........[Pass]\n" );
     iCursorY++;
@@ -61,7 +58,6 @@ void Main( void )
     }
     else
     {
-        kPrintString( 45, 15, "Fail" );
         kSetCursor( 45, iCursorY++ );
         kPrintf( "Fail\n" );
         while( 1 ) ;
@@ -78,20 +74,4 @@ void Main( void )
     // 쉘을 시작
     kCreateTask( TASK_FLAGS_LOWEST | TASK_FLAGS_IDLE, ( QWORD ) kIdleTask );
     kStartConsoleShell();
-}
-
-// 문자열을 X, Y 위치에 출력
-void kPrintString( int iX, int iY, const char *pcString )
-{
-    CHARACTER *pstScreen = ( CHARACTER* ) 0xB8000;
-    int i;
-
-    // X, Y 좌표를 이용해서 문자열을 출력할 어드레스를 계산
-    pstScreen += ( iY * 80 ) + iX;
-
-    // NULL이 나올 때까지 문자열 출력
-    for( i = 0 ; pcString[ i ] != 0 ; i++ )
-    {
-        pstScreen[ i ].bCharactor = pcString [ i ];
-    }
 }
