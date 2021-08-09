@@ -21,16 +21,16 @@ START:
     int 0x15                ; BIOS 인터럽트 서비스 호출
 
     jc .A20GATEERROR        ; A20 게이트 활성화가 성공했는지 확인
-    jmp .A20GATESUCESS
+    jmp .A20GATESUCCESS
 
 .A20GATEERROR:
     ; 에러 발생 시, 시스템 컨트롤 포트로 전환 시도
     in al, 0x92     ; 시스템 컨트롤 포트(0x92)에서 1바이트를 읽어서 AL 레지스터에 저장
     or al, 0x02     ; 읽은 값에 A20 게이트 비트(비트 1)를 1로 설정
-    and al, 0xF     ; 시스템 리셋 방지를 위해 0xFE와 AND 연산하여 비트 0를 0으로 설정
+    and al, 0xFE    ; 시스템 리셋 방지를 위해 0xFE와 AND 연산하여 비트 0를 0으로 설정
     out 0x92, al    ; 시스템 컨트롤 포트(0x92)에 변경된 값을 1바이트 설정
 
-.A20GATESUCESS:
+.A20GATESUCCESS:
     cli             ; 인터럽가 발생하지 못하도록 설정
     lgdt [ GDTR ]   ; GDTR 자료구조를 프로세서에 설정하여 GDT 테이블을 로드
 
@@ -128,7 +128,7 @@ PRINTMESSAGE:
     
     jmp .MESSAGELOOP        ; 메시지 출력 루프로 이동하여 다음 문자를 출력
 
-.MESSAGEEND
+.MESSAGEEND:
     pop edx         ; 함수에 사용이 끝난 EDX 레지스터부터 EBP 레지스터까지를 스택에
     pop ecx         ; 삽입된 값을 이용해서 복원
     pop eax         ; 스택은 가장 마지막에 들어간 데이터가 가장 먼저 나오는
@@ -147,7 +147,7 @@ align 8, db 0
 dw 0x0000
 ; GDTR 자료구조 정의
 GDTR:
-    dw GDTEND - GDT -1              ; 아래에 위치하는 GDT 테이블의 전체 크기
+    dw GDTEND - GDT - 1             ; 아래에 위치하는 GDT 테이블의 전체 크기
     dd ( GDT - $$ + 0x10000 )       ; 아래에 위치하는 GDT 테이블의 시작 어드레스
 
 ; GDT 테이블 정의

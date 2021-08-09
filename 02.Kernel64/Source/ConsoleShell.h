@@ -50,7 +50,7 @@ static void kHelp( const char* pcParameterBuffer );
 static void kCls( const char* pcParameterBuffer );
 static void kShowTotalRAMSize( const char* pcParameterBuffer );
 static void kStringToDecimalHexTest( const char* pcParameterBuffer );
-static void kShutdown( const char *pcParameterBuffer );
+static void kShutdown( const char* pcParameterBuffer );
 static void kSetTimer( const char* pcParameterBuffer );
 static void kWaitUsingPIT( const char* pcParameterBuffer );
 static void kReadTimeStampCounter( const char* pcParameterBuffer );
@@ -62,5 +62,8 @@ static void kShowTaskList( const char* pcParameterBuffer );
 static void kKillTask( const char* pcParameterBuffer );
 static void kCPULoad( const char* pcParameterBuffer );
 static void kTestMutex( const char* pcParameterBuffer );
+static void kCreateThreadTask( void );
+static void kTestThread( const char* pcParameterBuffer );
+static void kShowMatrix( const char* pcParameterBuffer );
 
 #endif /*__CONSOLESHELL_H__*/

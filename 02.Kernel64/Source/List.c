@@ -89,6 +89,7 @@ void* kRemoveList( LIST* pstList, QWORD qwID )
             {
                 pstList->pvHeader = pstLink->pvNext;
             }
+            // 만약 리스트의 마지막 데이터이면 Tail을 마지막 이전의 데이터로 변경
             else if( pstLink == pstList->pvTail )
             {
                 pstList->pvTail = pstPreviousLink;
@@ -153,7 +154,7 @@ void* kFindList( const LIST* pstList, QWORD qwID )
 }
 
 //  리스트의 헤더를 반환
-void* kGEtHeaderFromList( const LIST* pstList )
+void* kGetHeaderFromList( const LIST* pstList )
 {
     return pstList->pvHeader;
 }
@@ -164,6 +165,7 @@ void* kGetTailFromList( const LIST* pstList )
     return pstList->pvTail;
 }
 
+//  현재 아이템의 다음 아이템을 반환
 void* kGetNextFromList( const LIST* pstList, void* pstCurrent )
 {
     LISTLINK* pstLink;

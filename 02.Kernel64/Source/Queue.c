@@ -58,7 +58,7 @@ BOOL kPutQueue( QUEUE* pstQueue, const void* pvData )
 }
 
 //  큐에서 데이터를 제거
-BOOL kGetQueue( QUEUE* pstQueue, void *pvData )
+BOOL kGetQueue( QUEUE* pstQueue, void* pvData )
 {
     // 큐가 비었으면 제거할 수 없음
     if( kIsQueueEmpty( pstQueue ) == TRUE )
@@ -69,7 +69,7 @@ BOOL kGetQueue( QUEUE* pstQueue, void *pvData )
     // 제거 인덱스가 가리키는 위치에서 데이터의 크기만큼을 복사
     kMemCpy( pvData, ( char* )pstQueue->pvQueueArray + ( pstQueue->iDataSize * pstQueue->iGetIndex ), pstQueue->iDataSize );
 
-    // 제거 인덱스를 변경하고 제거 동작을 수행했음으로 기록
+    // 제거 인덱스를 변경하고 제거 동작을 수행했음을 기록
     pstQueue->iGetIndex = ( pstQueue->iGetIndex + 1 ) % pstQueue->iMaxDataCount;
     pstQueue->bLastOperationPut = FALSE;
     return TRUE;

@@ -11,7 +11,7 @@ void kInitializePIT( WORD wCount, BOOL bPeriodic )
     if( bPeriodic == TRUE )
     {
         // PIT 컨트롤 레지스터(포트 0x43)에 모드 2에 바이너리 카운터로 설정
-        kOutPortByte( PIT_PORT_CONTROL, PIT_COUNTER0_PERIOIDC );
+        kOutPortByte( PIT_PORT_CONTROL, PIT_COUNTER0_PERIODIC );
     }
 
     // 카운터 0(포트 0x40)에 LSB -> MSB 순으로 카운터 초기 값을 설정

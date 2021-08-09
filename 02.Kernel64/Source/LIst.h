@@ -52,7 +52,7 @@ void* kRemoveList( LIST* pstList, QWORD qwID );
 void* kRemoveListFromHeader( LIST* pstList );
 void* kRemoveListFromTail( LIST* pstList );
 void* kFindList( const LIST* pstList, QWORD qwID );
-void* kGEtHeaderFromList( const LIST* pstList );
+void* kGetHeaderFromList( const LIST* pstList );
 void* kGetTailFromList( const LIST* pstList );
 void* kGetNextFromList( const LIST* pstList, void* pstCurrent );
 

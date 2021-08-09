@@ -30,6 +30,6 @@ void kInitializeQueue( QUEUE* pstQueue, void* pvQueueBuffer, int iMaxDataCount, 
 BOOL kIsQueueFull( const QUEUE* pstQueue );
 BOOL kIsQueueEmpty( const QUEUE* pstQueue );
 BOOL kPutQueue( QUEUE* pstQueue, const void* pvData );
-BOOL kGetQueue( QUEUE* pstQueue, void *pvData );
+BOOL kGetQueue( QUEUE* pstQueue, void* pvData );
 
 #endif /*__QUEUE_H__*/

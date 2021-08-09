@@ -1,6 +1,6 @@
 #include "Synchronization.h"
 #include "Utility.h"
-#include "Task.h"SSS
+#include "Task.h"
 
 //  시스템 전역에서 사용하는 데이터를 위한 잠금 함수
 BOOL kLockForSystemData( void )

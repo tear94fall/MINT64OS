@@ -84,14 +84,14 @@ int kConsolePrintString( const char* pcBuffer )
     for( i = 0 ; i < iLength ; i++ )
     {
         // 줄바꿈 처리
-        if( pcBuffer[i] == '\n' )
+        if( pcBuffer[ i ] == '\n' )
         {
             // 출력할 위치를 80의 배수 컬럼으로 옮김
             // 현재 라인 남은 문자열 수만큼 더해서 다음 라인으로 위치시킴
             iPrintOffset += ( CONSOLE_WIDTH - ( iPrintOffset % CONSOLE_WIDTH ) );
         }
         // 탭처리
-        else if( pcBuffer[i] == '\t' )
+        else if( pcBuffer[ i ] == '\t' )
         {
             // 출력할 위치를 8의 배수 컬럼으로 옮김
             iPrintOffset += ( 8 - ( iPrintOffset % 8 ) );
@@ -113,7 +113,7 @@ int kConsolePrintString( const char* pcBuffer )
             kMemCpy( CONSOLE_VIDEOMEMORYADDRESS, CONSOLE_VIDEOMEMORYADDRESS + CONSOLE_WIDTH * sizeof( CHARACTER ), ( CONSOLE_HEIGHT - 1 ) * CONSOLE_WIDTH * sizeof( CHARACTER ) );
 
             // 가장 마지막 라인은 공백으로 채움
-            for( j = ( CONSOLE_HEIGHT - 1 ) * ( CONSOLE_WIDTH ); j < ( CONSOLE_HEIGHT * CONSOLE_WIDTH ) ; j ++ )
+            for( j = ( CONSOLE_HEIGHT - 1 ) * ( CONSOLE_WIDTH ); j < ( CONSOLE_HEIGHT * CONSOLE_WIDTH ) ; j++ )
             {
                 // 공백 출력
                 pstScreen[ j ].bCharactor = ' ';
@@ -155,7 +155,7 @@ BYTE kGetCh( void )
         // 키 큐에 데이터가 수신될 때까지 대기
         while( kGetKeyFromKeyQueue( &stData ) == FALSE )
         {
-            ;
+            kSchedule();
         }
 
         // 키가 눌렸다는 데이터가 수신되면 ASCII 코드를 반환
@@ -172,8 +172,8 @@ void kPrintStringXY( int iX, int iY, const char* pcString )
     CHARACTER* pstScreen = ( CHARACTER* ) CONSOLE_VIDEOMEMORYADDRESS;
     int i;
 
-    // 비디오 메모리 어드레서에서 현재 출력할 위치를 계산
-    pstScreen += ( iY * 80 ) + iX;
+    // 비디오 메모리 어드레스에서 현재 출력할 위치를 계산
+    pstScreen += ( iY * CONSOLE_WIDTH ) + iX;
     // 문자열의 길이만큼 루프를 돌면서 문자와 속성을 저장
     for( i = 0 ; pcString[ i ] != 0 ; i++ )
     {

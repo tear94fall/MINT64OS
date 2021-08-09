@@ -29,7 +29,7 @@
 #define GDT_FLAGS_LOWER_USERCODE ( GDT_TYPE_CODE | GDT_FLAGS_LOWER_S | GDT_FLAGS_LOWER_DPL3 | GDT_FLAGS_LOWER_P )
 #define GDT_FLAGS_LOWER_USERDATA ( GDT_TYPE_DATA | GDT_FLAGS_LOWER_S | GDT_FLAGS_LOWER_DPL3 | GDT_FLAGS_LOWER_P )
 
-// Upper FLags는 Granulaty로 설정하고 코드 및 데이트너느 64비트 추가
+// Upper FLags는 Granulaty로 설정하고 코드 및 데이터는 64비트 추가
 #define GDT_FLAGS_UPPER_CODE ( GDT_FLAGS_UPPER_G | GDT_FLAGS_UPPER_L )
 #define GDT_FLAGS_UPPER_DATA ( GDT_FLAGS_UPPER_G | GDT_FLAGS_UPPER_L )
 #define GDT_FLAGS_UPPER_TSS ( GDT_FLAGS_UPPER_G )
@@ -66,12 +66,12 @@
 
 // 실제로 사용할 매크로
 #define IDT_FLAGS_KERNEL        ( IDT_FLAGS_DPL0 | IDT_FLAGS_P )
-#define IDT_LFAGS_USER          ( IDT_FLAGS_DPL3 | IDT_FLAGS_P )
+#define IDT_FLAGS_USER          ( IDT_FLAGS_DPL3 | IDT_FLAGS_P )
 
 // 기타 IDT에 관련된 매크로
 // IDT 엔트리의 개수
 #define IDT_MAXENTRYCOUNT       100
-// IDT의 시작 어드레스, TSS 세그먼트의 뒤쪽에 위치
+// IDTR의 시작 어드레스, TSS 세그먼트의 뒤쪽에 위치
 #define IDTR_STARTADDRESS       ( GDTR_STARTADDRESS + sizeof( GDTR ) + GDT_TABLESIZE + TSS_SEGMENTSIZE )
 // IDT 테이블의 시작 어드레스
 #define IDT_STARTADDRESS        ( IDTR_STARTADDRESS + sizeof( IDTR ) )

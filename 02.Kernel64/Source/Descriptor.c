@@ -24,8 +24,8 @@ void kInitializeGDTTableAndTSS( void )
 
     // NULL, 64비트 Code/Data, TSS를 위해 총 4개의 세그먼틀 생성한다.
     kSetGDTEntry8( &( pstEntry[ 0 ] ), 0, 0, 0, 0, 0 );
-    kSetGDTEntry8( &( pstEntry[ 1 ] ), 0, 0xFFFF, GDT_FLAGS_UPPER_CODE, GDT_FLAGS_LOWER_KERNELCODE, GDT_TYPE_CODE );
-    kSetGDTEntry8( &( pstEntry[ 2 ] ), 0, 0xFFFF, GDT_FLAGS_UPPER_DATA, GDT_FLAGS_LOWER_KERNELDATA, GDT_TYPE_DATA );
+    kSetGDTEntry8( &( pstEntry[ 1 ] ), 0, 0xFFFFF, GDT_FLAGS_UPPER_CODE, GDT_FLAGS_LOWER_KERNELCODE, GDT_TYPE_CODE );
+    kSetGDTEntry8( &( pstEntry[ 2 ] ), 0, 0xFFFFF, GDT_FLAGS_UPPER_DATA, GDT_FLAGS_LOWER_KERNELDATA, GDT_TYPE_DATA );
     kSetGDTEntry16( ( GDTENTRY16*) &( pstEntry [ 3 ] ), ( QWORD ) pstTSS, sizeof( TSSSEGMENT ) - 1, GDT_FLAGS_UPPER_TSS, GDT_FLAGS_LOWER_TSS, GDT_TYPE_TSS );
 
     // TSS 초기화 GDT 이하 영역을 사용함
@@ -111,7 +111,7 @@ void kInitializeIDTTables( void )
 
     for( i = 21 ; i < 32 ; i++ )
     {
-        kSetIDTEntry( & ( pstEntry[ 20 ] ), kISRETCException, 0x08, IDT_FLAGS_IST1, IDT_FLAGS_KERNEL, IDT_TYPE_INTERRUPT );
+        kSetIDTEntry( & ( pstEntry[ i ] ), kISRETCException, 0x08, IDT_FLAGS_IST1, IDT_FLAGS_KERNEL, IDT_TYPE_INTERRUPT );
     }
     //==============================================================================
     //  인터럽트 ISR 등록
@@ -135,7 +135,7 @@ void kInitializeIDTTables( void )
     
     for( i = 48 ; i < IDT_MAXENTRYCOUNT ; i++ )
     {
-        kSetIDTEntry( & ( pstEntry[ 48 ] ), kISRETCInterrupt, 0x08, IDT_FLAGS_IST1, IDT_FLAGS_KERNEL, IDT_TYPE_INTERRUPT );
+        kSetIDTEntry( & ( pstEntry[ i ] ), kISRETCInterrupt, 0x08, IDT_FLAGS_IST1, IDT_FLAGS_KERNEL, IDT_TYPE_INTERRUPT );
     }
 }
 

@@ -1,5 +1,5 @@
 #ifndef __ASSEMBLYUTILITY_H__
-#define __ASSEMBLYUTITLIY_H__
+#define __ASSEMBLYUTILITY_H__
 
 #include "Types.h"
 #include "Task.h"

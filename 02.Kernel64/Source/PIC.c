@@ -11,7 +11,7 @@ void kInitializePIC( void )
     kOutPortByte( PIC_MASTER_PORT2, PIC_IRQSTARTVECTOR );
 
     // ICW3(포트 0x21), 슬레이브 PIC 컨트롤러가 연결 위치(비트로 표현)
-    // 먀스터 PIC 컨트롤러의 2번 핀에 연결되어 있으므로, 0x04(비트 2)로 설정
+    // 마스터 PIC 컨트롤러의 2번 핀에 연결되어 있으므로, 0x04(비트 2)로 설정
     kOutPortByte( PIC_MASTER_PORT2, 0x04 );
 
     // ICW4(포트 0x21), uPM 비트(비트 0) = 1
@@ -41,7 +41,7 @@ void kMaskPICInterrupt( WORD wIRQBitmask )
 
     // 슬레이브 PIC 컨트롤러에 IMR 설정
     // OCW1(포트 0xA1), IRQ 8~IRQ 15
-    kOutPortByte( PIC_SLAVE_PORT2, ( BYTE) ( wIRQBitmask >> 8 ) );
+    kOutPortByte( PIC_SLAVE_PORT2, ( BYTE ) ( wIRQBitmask >> 8 ) );
 }
 
 //  인터럽트 처리가 완료되었음을 전송(EOI)

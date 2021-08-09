@@ -190,7 +190,7 @@ void kEnableA20Gate( void )
     for( i = 0 ; i < 0xFFFF ; i++ )
     {
         // 출력 버퍼(포트 0x60)가 차 있으면 데이터를 읽을 수 있음
-        if( kIsOutputBufferFull() == FALSE )
+        if( kIsOutputBufferFull() == TRUE )
         {
             break;
         }
@@ -205,7 +205,7 @@ void kEnableA20Gate( void )
     for( i = 0 ; i < 0xFFFF ; i++ )
     {
         // 입력 버퍼(포트 0x60)가 비었으면 커맨드 전송 가능
-        if( kIsOutputBufferFull() == FALSE )
+        if( kIsInputBufferFull() == FALSE )
         {
             break;
         }
@@ -226,7 +226,7 @@ void kReboot( void )
     // 입력 버퍼(포트 0x60)에 데이터가 비어 있으면 출력 포트에 값을 쓰는 커맨드와 출력 포트 데이터 전송
     for( i = 0 ; i < 0xFFFF ; i++ )
     {
-        // 입력 버퍼(포트 0x6)가 비었으면 커맨드 전송 가능
+        // 입력 버퍼(포트 0x60)가 비었으면 커맨드 전송 가능
         if( kIsInputBufferFull() == FALSE )
         {
             break;
