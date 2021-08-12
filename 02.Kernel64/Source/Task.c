@@ -142,6 +142,9 @@ TCB* kCreateTask( QWORD qwFlags, void* pvMemoryAddress, QWORD qwMemorySize, QWOR
     // 자식 스레드의 리스트를 초기화
     kInitializeList( &( pstTask->stChildThreadList ) );
 
+    // FPU 사용 여부를 사용하지 않은 것으로 초기화
+    pstTask->bFPUUsed = FALSE;
+
     // 임계 영역 시작
     bPreviousFlag = kLockForSystemData();
 
@@ -223,6 +226,9 @@ void kInitializeScheduler( void )
     // 프로세서 사용률을 계산하는데 사용하는 자료구조 초기화
     gs_stScheduler.qwSpendProcessorTimeInIdleTask = 0;
     gs_stScheduler.qwProcessorLoad = 0;
+
+    // FPU를 사용한 태스크 ID를 유효하지 않은 값으로 초기화
+    gs_stScheduler.qwLastFPUUsedTaskID = TASK_INVALIDID;
 }
 
 //  현재 수행 중인 태스크를 설정
@@ -425,6 +431,16 @@ void kSchedule( void )
         gs_stScheduler.qwSpendProcessorTimeInIdleTask += TASK_PROCESSORTIME - gs_stScheduler.iProcessorTime;
     }
 
+    // 다음에 수행할 태스크가 FPU를 쓴 태스크가 아니라면 TS 비트 설정
+    if( gs_stScheduler.qwLastFPUUsedTaskID != pstNextTask->stLink.qwID )
+    {
+        kSetTS();
+    }
+    else
+    {
+        kClearTS();
+    }
+
     // 태스크 종료 플래그가 설정된 경우 콘텍스트를 저장할 필요가 없으므로, 대기 리스트에
     // 삽입하고 콘텍스트 전환
     if( pstRunningTask->qwFlags & TASK_FLAGS_ENDTASK )
@@ -494,6 +510,16 @@ BOOL kScheduleInInterrupt( void )
     }
     // 임계 영역 끝
     kUnlockForSystemData( bPreviousFlag );
+
+    // 다음에 수행할 태스크가 FPU를 쓴 태스크가 아니라면 TS 비트 설정
+    if( gs_stScheduler.qwLastFPUUsedTaskID != pstNextTask->stLink.qwID )
+    {
+        kSetTS();
+    }
+    else
+    {
+        kClearTS();
+    }
 
     // 전환해서 실행할 태스크를 Running Task로 설정하고 콘텍스트를 IST에 복사해서
     // 자동으로 태스크 전환이 일어나도록 함
@@ -822,4 +848,19 @@ void kHaltProcessorByLoad( void )
     {
         kHlt();
     }
+}
+
+//==============================================================================
+//  FPU 관련
+//==============================================================================
+//  마지막으로 FPU를 사용한 태스크 ID를 반환
+QWORD kGetLastFPUUsedTaskID( void )
+{
+    return gs_stScheduler.qwLastFPUUsedTaskID;
+}
+
+// 마지막으로 FPU를 사용한 태스크 ID를 설정
+void kSetLastFPUUsedTaskID( QWORD qwTaskID )
+{
+    gs_stScheduler.qwLastFPUUsedTaskID = qwTaskID;
 }
