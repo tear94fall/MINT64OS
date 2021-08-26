@@ -12,7 +12,8 @@ DynamicMemory.o: ../Source/DynamicMemory.c ../Source/DynamicMemory.h \
  ../Source/Types.h ../Source/Utility.h ../Source/Task.h ../Source/List.h
 FileSystem.o: ../Source/FileSystem.c ../Source/FileSystem.h \
  ../Source/Types.h ../Source/Synchronization.h ../Source/HardDisk.h \
- ../Source/DynamicMemory.h
+ ../Source/DynamicMemory.h ../Source/Task.h ../Source/List.h \
+ ../Source/Utility.h
 HardDisk.o: ../Source/HardDisk.c ../Source/HardDisk.h ../Source/Types.h \
  ../Source/Synchronization.h
 InterruptHandler.o: ../Source/InterruptHandler.c \
