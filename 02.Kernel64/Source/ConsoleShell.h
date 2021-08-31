@@ -82,5 +82,7 @@ static void kShowRootDirectory( const char* pcParameterBuffer );
 static void kWriteDataToFile( const char* pcParameterBuffer );
 static void kReadDataFromFile( const char* pcParameterBuffer );
 static void kTestFileIO( const char* pcParameterBuffer );
+static void kFlushCache( const char* pcParameterBuffer );
+static void kTestPerformance( const char* pcParameterBuffer );
 
 #endif /*__CONSOLESHELL_H__*/

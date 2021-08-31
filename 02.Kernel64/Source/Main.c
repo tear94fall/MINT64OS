@@ -80,21 +80,8 @@ void Main( void )
     kSetCursor( 45, iCursorY++ );
     kPrintf( "Pass\n" );
 
-    // 하드 디스크를 초기화
-    kPrintf( "HDD initialize..............................[    ]" );
-    if( kInitializeHDD() == TRUE )
-    {
-        kSetCursor( 45, iCursorY++ );
-        kPrintf( "Pass\n" );
-    }
-    else
-    {
-        kSetCursor( 45, iCursorY++ );
-        kPrintf( "Fail\n" );
-    }
-
     // 파일 시스템을 초기화
-    kPrintf( "File System Initialize.......................[    ]" );
+    kPrintf( "File System Initialize......................[    ]" );
     if( kInitializeFileSystem() == TRUE )
     {
         kSetCursor( 45, iCursorY++ );
@@ -103,7 +90,7 @@ void Main( void )
     else
     {
         kSetCursor( 45, iCursorY++ );
-        kPrintf( "Pass\n" );
+        kPrintf( "Fail\n" );
     }
 
     // 유휴 태스크를 시스템 스레드로 생성하고 쉘을 시작
