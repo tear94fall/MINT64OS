@@ -9,6 +9,7 @@
 #include "DynamicMemory.h"
 #include "HardDisk.h"
 #include "FileSystem.h"
+#include "SerialPort.h"
 
 // 아래 함수는 C 언어 커널의 시작 부분임
 void Main( void )
@@ -92,6 +93,11 @@ void Main( void )
         kSetCursor( 45, iCursorY++ );
         kPrintf( "Fail\n" );
     }
+
+    // 시리얼 포트 초기화
+    kPrintf( "Serial Port Initialize......................[PASS]\n" );
+    iCursorY++;
+    kInitializeSerialPort();
 
     // 유휴 태스크를 시스템 스레드로 생성하고 쉘을 시작
     kCreateTask( TASK_FLAGS_LOWEST | TASK_FLAGS_THREAD | TASK_FLAGS_SYSTEM | TASK_FLAGS_IDLE, 0, 0, ( QWORD ) kIdleTask );

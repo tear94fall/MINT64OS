@@ -10,6 +10,7 @@
 #include "DynamicMemory.h"
 #include "HardDisk.h"
 #include "FileSystem.h"
+#include "SerialPort.h"
 
 // 커맨드 테이블 정의
 SHELLCOMMANDENTRY gs_vstCommandTable[] =
@@ -50,6 +51,7 @@ SHELLCOMMANDENTRY gs_vstCommandTable[] =
     { "testfileio", "Test File I/O Function", kTestFileIO },
     { "testperformance", "Test File Read/WritePerformance", kTestPerformance },
     { "flush", "Flush File System Cache", kFlushCache },
+    { "download", "Download Data From Serial, ex) download a.txt", kDownloadFile },
 };
 
 //==============================================================================
@@ -2071,4 +2073,140 @@ static void kFlushCache( const char* pcParameterBuffer )
         kPrintf( "Fail\n" );
     }
     kPrintf( "Total Time = %d ms\n", kGetTickCount() - qwTickCount );
+}
+
+//  시리얼 포트로부터 데이터를 수신하여 파일로 저장
+static void kDownloadFile( const char* pcParameterBuffer )
+{
+    PARAMETERLIST stList;
+    char vcFileName[ 50 ];
+    int iFileNameLength;
+    DWORD dwDataLength;
+    FILE* fp;
+    DWORD dwReceivedSize;
+    DWORD dwTempSize;
+    BYTE vbDataBuffer[ SERIAL_FIFOMAXSIZE ];
+    QWORD qwLastReceivedTickCount;
+
+    // 파라미터 리스트를 초기화하여 파일 이름을 추출
+    kInitializeParameter( &stList, pcParameterBuffer );
+    iFileNameLength = kGetNextParameter( &stList, vcFileName );
+    vcFileName[ iFileNameLength ] = '\0';
+    if( ( iFileNameLength > ( FILESYSTEM_MAXFILENAMELENGTH - 1 ) ) || ( iFileNameLength == 0 ) )
+    {
+        kPrintf( "Too Long or Too Short File Name\n" );
+        kPrintf( "ex) download a.txt\n" );
+        return ;
+    }
+
+    // 시리얼 포트의 FIFO를 모두 비움
+    kClearSerialFIFO();
+    //===================================================================================
+    // 데이터 길이가 수신될 때까지 기다린다는 메시지를 출력하고, 4바이트를 수신한 뒤 ACK 전송
+    //===================================================================================
+    kPrintf( "Waiting For Data Length....." );
+    dwReceivedSize = 0;
+    qwLastReceivedTickCount = kGetTickCount();
+    while( dwReceivedSize < 4 )
+    {
+        // 남은 수만큼 데이터 수신
+        dwTempSize = kReceiveSerialData( ( ( BYTE* ) &dwDataLength ) + dwReceivedSize, 4 - dwReceivedSize );
+        dwReceivedSize += dwTempSize;
+
+        // 수신된 데이터가 없다면 잠시 대기
+        if( dwTempSize == 0 )
+        {
+            kSleep( 0 );
+
+            // 대기한 시간이 30초 이상이라면 Time Out으로 중지
+            if( ( kGetTickCount() - qwLastReceivedTickCount ) > 30000 )
+            {
+                kPrintf( "Time Out Occur~!!\n" );
+                return ;
+            }
+        }
+        else
+        {
+            // 마지막으로 데이터를 수신한 시간을 갱신
+            qwLastReceivedTickCount = kGetTickCount();
+        }
+    }
+    kPrintf( "[%d] Byte\n", dwDataLength );
+
+    // 정상적으로 데이터 길이를 수신했으므로 ACK를 수신
+    kSendSerialData( "A", 1 );
+
+    //==============================================================================
+    // 파일을 생성하고 시리얼로부터 데이터를 수신하여 파일에 저장
+    //==============================================================================
+    // 파일 생성
+    fp = fopen( vcFileName, "w" );
+    if( fp == NULL )
+    {
+        kPrintf( "%s File Open Fail\n", vcFileName );
+        return ;
+    }
+
+    // 데이터 수신
+    kPrintf( "Data Receive Start: " );
+    dwReceivedSize = 0;
+    qwLastReceivedTickCount = kGetTickCount();
+    while( dwReceivedSize < dwDataLength )
+    {
+        // 버퍼에 담아서 데이터를 씀
+        dwTempSize = kReceiveSerialData( vbDataBuffer, SERIAL_FIFOMAXSIZE );
+        dwReceivedSize += dwTempSize;
+
+        // 이번에 데이터가 수신된 것이 있다면 ACK 또는 파일 쓰기 수행
+        if( dwTempSize != 0 )
+        {
+            // 수신하는 쪽은 데이터의 마지막까지 수신했거나 FIFO의 크기인
+            // 16바이트마다 한 번씩 ACK를 전송
+            if( ( ( dwReceivedSize % SERIAL_FIFOMAXSIZE ) == 0 ) || ( ( dwReceivedSize == dwDataLength ) ) )
+            {
+                kSendSerialData( "A", 1 );
+                kPrintf( "#" );
+            }
+
+            // 쓰기 중에 문제가 생기면 바로 종료
+            if( fwrite( vbDataBuffer, 1, dwTempSize, fp ) != dwTempSize )
+            {
+                kPrintf( "File Write Error Occur\n" );
+                break;
+            }
+
+            // 마지막으로 데이터를 수신한 시간을 갱신
+            qwLastReceivedTickCount = kGetTickCount();
+        }
+        // 이번에 수신된 데이터가 없다면 잠시 대기
+        else
+        {
+            kSleep( 0 );
+
+            // 대기한 시간이 10초 이상이라면 Time Out으로 중지
+            if( ( kGetTickCount() - qwLastReceivedTickCount ) > 10000 )
+            {
+                kPrintf( "Time Out Occur~!!\n" );
+                break;
+            }
+        }
+    }
+
+    //=================================================================================
+    // 전체 데이터의 크기와 실제로 수신받은 데이터의 크기를 비교하여 성공 여부를 출력한 뒤,
+    // 파일을 닫고 파일 시스템 캐시를 모두 비움
+    //=================================================================================
+    // 수신된 길이를 비교해서 문제가 발생했는지를 표시
+    if( dwReceivedSize != dwDataLength )
+    {
+        kPrintf( "\nError Occur. Total Size [%d] Received Size [%d]\n", dwReceivedSize, dwDataLength );
+    }
+    else
+    {
+        kPrintf( "\nReceived Complete. Total Size [%d] Byte\n", dwReceivedSize );
+    }
+
+    // 파일을 닫고 파일 시스템 캐시를 내보냄
+    fclose( fp );
+    kFlushFileSystemCache();
 }
