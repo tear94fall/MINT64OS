@@ -1,6 +1,7 @@
 #include "Descriptor.h"
 #include "Utility.h"
 #include "ISR.h"
+#include "MultiProcessor.h"
 
 //==============================================================================
 //  GDT 및 TSS
@@ -19,14 +20,22 @@ void kInitializeGDTTableAndTSS( void )
     pstEntry = ( GDTENTRY8* ) ( GDTR_STARTADDRESS + sizeof( GDTR ) );
     pstGDTR->wLimit = GDT_TABLESIZE - 1;
     pstGDTR->qwBaseAddress = ( QWORD ) pstEntry;
-    // TSS 영역 설정
+
+    // TSS 세그먼트 영역 설정, GDT 테이블의 뒤쪽에 위치
     pstTSS = ( TSSSEGMENT* ) ( ( QWORD ) pstEntry + GDT_TABLESIZE );
 
-    // NULL, 64비트 Code/Data, TSS를 위해 총 4개의 세그먼틀 생성한다.
+    // NULL, 64비트 Code/Data, TSS를 위해 총 3 + 16개의 세그먼트를 생성
     kSetGDTEntry8( &( pstEntry[ 0 ] ), 0, 0, 0, 0, 0 );
     kSetGDTEntry8( &( pstEntry[ 1 ] ), 0, 0xFFFFF, GDT_FLAGS_UPPER_CODE, GDT_FLAGS_LOWER_KERNELCODE, GDT_TYPE_CODE );
     kSetGDTEntry8( &( pstEntry[ 2 ] ), 0, 0xFFFFF, GDT_FLAGS_UPPER_DATA, GDT_FLAGS_LOWER_KERNELDATA, GDT_TYPE_DATA );
-    kSetGDTEntry16( ( GDTENTRY16*) &( pstEntry [ 3 ] ), ( QWORD ) pstTSS, sizeof( TSSSEGMENT ) - 1, GDT_FLAGS_UPPER_TSS, GDT_FLAGS_LOWER_TSS, GDT_TYPE_TSS );
+
+    // 16개 코어 지원을 위해 16개의 TSS 디스크립터를 생성
+    for( i = 0 ; i < MAXPROCESSORCOUNT ; i++ )
+    {
+        // TSS는 16바이트이므로 kSetGDTEntry16() 함수 사용
+        // pstEntry는 8바이트이므로 2개를 합쳐서 하나로 사용
+        kSetGDTEntry16( ( GDTENTRY16* ) &( pstEntry [ GDT_MAXENTRY8COUNT + ( i * 2 ) ] ), ( QWORD ) pstTSS + ( i * sizeof( TSSSEGMENT) ), sizeof( TSSSEGMENT ) - 1, GDT_FLAGS_UPPER_TSS, GDT_FLAGS_LOWER_TSS, GDT_TYPE_TSS );
+    }
 
     // TSS 초기화 GDT 이하 영역을 사용함
     kInitializeTSSSegment( pstTSS );
@@ -61,10 +70,25 @@ void kSetGDTEntry16( GDTENTRY16* pstEntry, QWORD qwBaseAddress, DWORD dwLimit, B
 //  TSS 세그먼트의 정보를 초기화
 void kInitializeTSSSegment( TSSSEGMENT* pstTSS )
 {
-    kMemSet( pstTSS, 0, sizeof( TSSSEGMENT ) );
-    pstTSS->qwIST[ 0 ] = IST_STARTADDRESS + IST_SIZE;
-    // IO 를 TSS의 limit 값보다 크게 설정함으로써 IO Map을 사용하지 않도록 함
-    pstTSS->wIOMapBaseAddress = 0xFFFF;
+    int i;
+
+    // 최대 프로세서 또는 코어의 수만큼 루프를 돌면서 생성
+    for( i = 0 ; i < MAXPROCESSORCOUNT ; i++ )
+    {
+        // 0으로 초기화
+        kMemSet( pstTSS, 0, sizeof( TSSSEGMENT ) );
+
+        // IST의 뒤에서부터 잘라서 할당함. (주의, IST는 16바이트 단위로 정렬해야 함)
+        pstTSS->qwIST[ 0 ] = IST_STARTADDRESS + IST_SIZE - ( IST_SIZE / MAXPROCESSORCOUNT * i );
+
+        
+        // IO Map의 기준 주소를 TSS 디스크립터의 Limit 필드보다 크게 설정함으로써
+        // IO Map을 사용하지 않도록 함
+        pstTSS->wIOMapBaseAddress = 0xFFFF;
+
+        // 다음 엔트리로 이동
+        pstTSS++;
+    }
 }
 
 //==============================================================================

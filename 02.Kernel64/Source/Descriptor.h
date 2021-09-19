@@ -45,10 +45,11 @@
 // 8바이트 엔트리의 개수, 널 디스크립터/커널 코드/커널 데이터
 #define GDT_MAXENTRY8COUNT  3
 // 16바이트 엔트리의 개수, TSS
-#define GDT_MAXENTRY16COUNT 1
+#define GDT_MAXENTRY16COUNT ( MAXPROCESSORCOUNT )
 // GDT 테이블의 크기
 #define GDT_TABLESIZE           ( ( sizeof( GDTENTRY8 ) * GDT_MAXENTRY8COUNT ) + ( sizeof( GDTENTRY16 ) * GDT_MAXENTRY16COUNT ) )
-#define TSS_SEGMENTSIZE         ( sizeof( TSSSEGMENT ) )
+// TSS 세그먼트의 전체 크기
+#define TSS_SEGMENTSIZE         ( sizeof( TSSSEGMENT ) * MAXPROCESSORCOUNT )
 
 //==============================================================================
 //  IDT

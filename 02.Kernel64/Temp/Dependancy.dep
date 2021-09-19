@@ -10,9 +10,11 @@ ConsoleShell.o: ../Source/ConsoleShell.c ../Source/ConsoleShell.h \
  ../Source/Synchronization.h ../Source/DynamicMemory.h \
  ../Source/HardDisk.h ../Source/FileSystem.h ../Source/CacheManager.h \
  ../Source/SerialPort.h ../Source/Queue.h \
- ../Source/MPConfigurationTable.h
+ ../Source/MPConfigurationTable.h ../Source/LocalAPIC.h \
+ ../Source/MultiProcessor.h
 Descriptor.o: ../Source/Descriptor.c ../Source/Descriptor.h \
- ../Source/Types.h ../Source/Utility.h ../Source/ISR.h
+ ../Source/Types.h ../Source/Utility.h ../Source/ISR.h \
+ ../Source/MultiProcessor.h
 DynamicMemory.o: ../Source/DynamicMemory.c ../Source/DynamicMemory.h \
  ../Source/Types.h ../Source/Utility.h ../Source/Task.h ../Source/List.h
 FileSystem.o: ../Source/FileSystem.c ../Source/FileSystem.h \
@@ -31,6 +33,8 @@ Keyboard.o: ../Source/Keyboard.c ../Source/Types.h \
  ../Source/AssemblyUtility.h ../Source/Task.h ../Source/List.h \
  ../Source/Keyboard.h ../Source/Queue.h ../Source/Synchronization.h
 List.o: ../Source/List.c ../Source/List.h ../Source/Types.h
+LocalAPIC.o: ../Source/LocalAPIC.c ../Source/LocalAPIC.h \
+ ../Source/Types.h ../Source/MPConfigurationTable.h
 MPConfigurationTable.o: ../Source/MPConfigurationTable.c \
  ../Source/MPConfigurationTable.h ../Source/Types.h ../Source/Console.h
 Main.o: ../Source/Main.c ../Source/Types.h ../Source/Keyboard.h \
@@ -38,7 +42,12 @@ Main.o: ../Source/Main.c ../Source/Types.h ../Source/Keyboard.h \
  ../Source/ConsoleShell.h ../Source/Task.h ../Source/List.h \
  ../Source/PIT.h ../Source/DynamicMemory.h ../Source/HardDisk.h \
  ../Source/Synchronization.h ../Source/FileSystem.h \
- ../Source/CacheManager.h ../Source/SerialPort.h ../Source/Queue.h
+ ../Source/CacheManager.h ../Source/SerialPort.h ../Source/Queue.h \
+ ../Source/MultiProcessor.h
+MultiProcessor.o: ../Source/MultiProcessor.c ../Source/MultiProcessor.h \
+ ../Source/Types.h ../Source/MPConfigurationTable.h \
+ ../Source/AssemblyUtility.h ../Source/Task.h ../Source/List.h \
+ ../Source/LocalAPIC.h ../Source/PIT.h
 PIC.o: ../Source/PIC.c ../Source/PIC.h ../Source/Types.h
 PIT.o: ../Source/PIT.c ../Source/PIT.h ../Source/Types.h
 Queue.o: ../Source/Queue.c ../Source/Queue.h ../Source/Types.h

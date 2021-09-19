@@ -383,7 +383,7 @@ void kPrintMPConfigurationTable( void )
         // 3개를 출력하고 나면 키 입력을 대기
         if( ( i != 0 ) && ( ( ( i + 1 ) % 3 ) == 0 ) )
         {
-            kPrintf( "Press any key to continure... ('q' is exit) : " );
+            kPrintf( "Press any key to continue... ('q' is exit) : " );
             if( kGetCh() == 'q' )
             {
                 kPrintf( "\n" );

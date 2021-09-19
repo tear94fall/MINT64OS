@@ -24,5 +24,6 @@ void kSetTS( void );
 void kClearTS( void );
 WORD kInPortWord( WORD wPort );
 void kOutPortWord( WORD wPort, WORD wData );
+void kEnableGlobalLocalAPIC( void );
 
 #endif /*__ASSEMBLYUTILITY_H__*/

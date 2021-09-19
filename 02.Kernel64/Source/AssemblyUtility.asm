@@ -9,6 +9,7 @@ global kEnableInterrupt, kDisableInterrupt, kReadRFLAGS
 global kReadTSC
 global kSwitchContext, kHlt, kTestAndSet
 global kInitializeFPU, kSaveFPUContext, kLoadFPUContext, kSetTS, kClearTS
+global kEnableGlobalLocalAPIC
 
 ; 포트로부터 1바이트를 읽음
 ;   PARAM: 포트 번호
@@ -300,4 +301,25 @@ kSetTS:
 ;   PARAM: 없음
 kClearTS:
     clts                ; CR0 컨트롤 레지스터에서 TS 비트를 0으로 설정
+    ret
+
+; IA32_APIC_BASE MSR의 APIC 전역 활성화 필드(비트 11)를 1로 설정하여 APIC를 활성화함
+;   PARAM: 없음
+kEnableGlobalLocalAPIC:
+    push rax            ; RDMSR과 WRMSR에서 사용하는 레지스터를 모두 스택에 저장
+    push rcx
+    push rdx
+
+    ; IA32_APIC BASE MSR에 설정된 기존 값을 읽어서 전역 APIC 비트를 활성화
+    mov rcx, 27         ; IA32_APIC_BASE MSR은 레지스터 어드레스 27에 위치하며,
+    rdmsr               ; MSR의 상위 32비트와 하위 32비트는 각각 EDX 레지스터와
+                        ; EAX 레지스터를 사용함
+
+    or eax, 0x0800      ; APIC 전역 활성/비활성 필드는 비트 11에 위치하므로 하위
+    wrmsr               ; 32 비트를 담당하는 EAX 레지스터의 비트 11을 1로 설정한 뒤
+                        ; MSR 레지스터에 값을 덮어씀
+
+    pop rdx             ; 사용이 끝난 레지스터를 스택에서 복원
+    pop rcx
+    pop rax
     ret

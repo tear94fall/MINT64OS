@@ -8,6 +8,9 @@ BOOL kInitializeKernel64Area( void );
 BOOL kIsMemoryEnough( void );
 void kCopyKernel64ImageTo2Mbyte( void );
 
+// Bootstrap Processor 여부가 저장된 어드레스, 부트 로더 영역의 앞쪽에 위치
+#define BOOTSTRAPPROCESSOR_FLAGADDRESS  0x7C09
+
 // 아래 함수는 C 언어 커널의 시작 부분임
 //     반드시 다른 함수들 보다 가장 앞쪽에 존재해야함
 void Main( void )
@@ -16,6 +19,16 @@ void Main( void )
     DWORD dwEAX, dwEBX, dwECX, dwEDX;
     char vcVendorString[ 13 ] = { 0, };
 
+    // Application Processor이면 아래의 코드를 생략하고 바로 64비트 모드로 전환
+    if( *( ( BYTE* ) BOOTSTRAPPROCESSOR_FLAGADDRESS ) == 0 )
+    {
+        kSwitchAndExecute64bitKernel();
+        while( 1 ) ;
+    }
+
+    //==============================================================================
+    // BSP만 수행하는 코드
+    //==============================================================================
     kPrintString( 0, 3, "Protected Mode C Language Kernel Start......[Pass]" );
 
     // 최소 메모리 크기를 만족하는 지 검사

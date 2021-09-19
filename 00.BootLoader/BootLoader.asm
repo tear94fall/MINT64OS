@@ -11,6 +11,7 @@ jmp 0x07C0:START	; CS 세그먼트 레지스터에 0x07C0을 복사하면서 STA
 TOTALSECTORCOUNT:	dw	0x02		; 부트 로더를 제외한 MINT64 OS 이미지의 크기
 									; 최대 1152 섹터 (0x90000byte)까지 가능
 KERNEL32SECTORCOUNT: dw 0x02		; 보호 모드 커널의 총 수
+BOOTSTRAPPROCESSOR: db 0x01			; Bootstrap Processor인지 여부
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;	코드 영역
