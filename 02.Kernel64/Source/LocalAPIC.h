@@ -50,8 +50,22 @@
 #define APIC_DESTINATIONSHORTHAND_ALLINCLUDINGSELF  0x080000
 #define APIC_DESTINATIONSHORTHAND_ALLEXCLUDINGSELF  0x0C0000
 
+// 인터럽트 마스크(Interrupt Mask) 관련 매크로
+#define APIC_INTERRUPT_MASK                         0x010000
+
+// 타이머 모드(Timer Mode) 관련 매크로
+#define APIC_TIMERMODE_PERIODIC                     0x020000
+#define APIC_TIMERMODE_ONESHOT                      0x000000
+
+// 인터럽트 입력 핀 극성(Interrupt Input Pin Polarity) 관련 매크로
+#define APIC_POLARITY_ACTIVELOW                     0x002000
+#define APIC_POLARITY_ACTIVEHIGH                    0x000000
+
 //  함수
 QWORD kGetLocalAPICBaseAddress( void );
 void kEnableSoftwareLocalAPIC( void );
+void kSendEOIToLocalAPIC( void );
+void kSetTaskPriority( BYTE bPriority );
+void kInitializeLocalVectorTable( void );
 
 #endif /*__LOCALAPIC_H__*/

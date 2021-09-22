@@ -136,15 +136,32 @@ void MainForApplicationProcessor( void )
     // IDT 테이블을 설정
     kLoadIDTR( IDTR_STARTADDRESS );
 
+    // 현재 코어의 로컬 APIC를 활성화
+    kEnableSoftwareLocalAPIC();
+
+    // 모든 인터럽트를 수신할 수 있도록 태스크 우선순위 레지스터를 0으로 설정
+    kSetTaskPriority( 0 );
+
+    // 로컬 APIC의 로컬 벡터 테이블을 초기화
+    kInitializeLocalVectorTable();
+
+    // 인터럽트를 활성화
+    kEnableInterrupt();
+    
+    // 대칭 I/O 모드 테스트를 위해 Application Processor가 시작한 후 한 번만 출력
+    kPrintf( "Application Processor[APIC ID: %d] Is Activated\n", kGetAPICID() );
+
     // 1초마다 한 번씩 메시지를 출력
     qwTickCount = kGetTickCount();
+
     while( 1 )
     {
         if( kGetTickCount() - qwTickCount > 1000 )
         {
             qwTickCount = kGetTickCount();
 
-            kPrintf( "Application Processor[APIC ID: %d] Is Activated\n", kGetAPICID() );
+            // 대칭 I/O 모드 테스트를 위해 Application Processor가 시작한 후 한 번만 출력
+            // kPrintf( "Application Processor[APIC ID: %d] Is Activated\n", kGetAPICID() );
         }
     }
 }

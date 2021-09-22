@@ -43,8 +43,11 @@ void kCommonInterruptHandler( int iVectorNumber )
     kPrintStringXY( 70, 0, vcBuffer );
     //==============================================================================
 
-    // EOI 전송
+    // PIC 컨트롤러로 EOI 전송
     kSendEOIToPIC( iVectorNumber - PIC_IRQSTARTVECTOR );
+
+    // 로컬 APIC로 EOI 전송
+    kSendEOIToLocalAPIC();
 }
 
 //  키보드 인터럽트의 핸들러
@@ -70,8 +73,11 @@ void kKeyboardHandler( int iVectorNumber )
         kConvertScanCodeAndPutQueue( bTemp );
     }
 
-    // EOI 전송
+    // PIC 컨트롤러로 EOI 전송
     kSendEOIToPIC( iVectorNumber - PIC_IRQSTARTVECTOR );
+
+    // 로컬 APIC로 EOI 전송
+    kSendEOIToLocalAPIC();
 }
 
 //  타이머 인터럽트의 핸들러
@@ -91,8 +97,11 @@ void kTimerHandler( int iVectorNumber )
     kPrintStringXY( 70, 0, vcBuffer );
     //==============================================================================
 
-    // EOI 전송
+    // PIC 컨트롤러로 EOI 전송
     kSendEOIToPIC( iVectorNumber - PIC_IRQSTARTVECTOR );
+
+    // 로컬 APIC로 EOI 전송
+    kSendEOIToLocalAPIC();
 
     // 타이머 발생 횟수를 증가
     g_qwTickCount++;
@@ -195,6 +204,10 @@ void kHDDHandler( int iVectorNumber )
         // 두 번째 PATA 포트의 인터럽트 발생 여부를 TRUE로 설정
         kSetHDDInterruptFlag( FALSE, TRUE );
     }
-    // EOI 전송
+
+    // PIC 컨트롤러로 EOI 전송
     kSendEOIToPIC( iVectorNumber - PIC_IRQSTARTVECTOR );
+
+    // 로컬 APIC로 EOI 전송
+    kSendEOIToLocalAPIC();
 }
