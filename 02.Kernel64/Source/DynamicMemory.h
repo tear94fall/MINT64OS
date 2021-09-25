@@ -2,6 +2,7 @@
 #define __DYNAMICMEMORY_H__
 
 #include "Types.h"
+#include "Synchronization.h"
 
 // 매크로
 // 동적 메모리 영억의 시작 어드레스, 1MB 단위로 정렬
@@ -24,6 +25,9 @@ typedef struct kBitmapStruct
 // 버디 블록을 관리하는 자료구조
 typedef struct kDynamicMemoryManagerStruct
 {
+    // 자료구조 동기화를 위한 스핀락
+    SPINLOCK stSpinLock;
+
     // 블록 리스트의 총 개수와 크기가 가장 작은 블록의 개수, 그리고 할당된 메모리 크기
     int iMaxLevelCount;
     int iBlockCountOfSmallestBlock;

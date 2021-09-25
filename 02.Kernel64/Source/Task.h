@@ -3,6 +3,7 @@
 
 #include "Types.h"
 #include "List.h"
+#include "Synchronization.h"
 
 // 매크로
 // SS, RSP, RFLAGS, CS, RIP + ISR에 저장하는 19개의 레지스터
@@ -141,6 +142,9 @@ typedef struct kTCBPoolManagerStruct
 // 스케줄러의 상태를 관리하는 자료구조
 typedef struct kSchedulerStruct
 {
+    // 자료구조 동기화를 위한 스핀락
+    SPINLOCK stSpinLock;
+
     // 현재 수행 중인 태스크
     TCB* pstRunningTask;
     

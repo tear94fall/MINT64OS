@@ -2,6 +2,7 @@
 #define __KEYBOARD_H__
 
 #include "Types.h"
+#include "Synchronization.h"
 
 // 매크로
 // Pause 키를 처리하기 위해 무시해야 하는 나머지 스캔 코드의 수
@@ -73,6 +74,9 @@ typedef struct kKeyMappingEntryStruct
 // 키보드의 상태를 관리하는 자료구조
 typedef struct kKeyboardManagerStruct
 {
+    // 자료구조 동기화를 위한 스핀락
+    SPINLOCK stSpinLock;
+
     // 조합키 정보
     BOOL bShiftDown;
     BOOL bCapsLockOn;

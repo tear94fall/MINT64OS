@@ -7,7 +7,7 @@ global kInPortByte, kOutPortByte, kInPortWord, kOutPortWord
 global kLoadGDTR, kLoadTR, kLoadIDTR
 global kEnableInterrupt, kDisableInterrupt, kReadRFLAGS
 global kReadTSC
-global kSwitchContext, kHlt, kTestAndSet
+global kSwitchContext, kHlt, kTestAndSet, kPause
 global kInitializeFPU, kSaveFPUContext, kLoadFPUContext, kSetTS, kClearTS
 global kEnableGlobalLocalAPIC
 
@@ -322,4 +322,10 @@ kEnableGlobalLocalAPIC:
     pop rdx             ; 사용이 끝난 레지스터를 스택에서 복원
     pop rcx
     pop rax
+    ret
+
+; 프로세서를 쉬게 함
+;   PARAM: 없음
+kPause:
+    pause               ; 프로세서를 일시 중지 상태로 진입시킴
     ret

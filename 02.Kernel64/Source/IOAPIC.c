@@ -225,3 +225,21 @@ void kPrintIRQToINTINMap( void )
         kPrintf( "IRQ[%d] -> INTIN [%d]\n", i, gs_stIOAPICManager.vbIRQToINTINMap[ i ] );
     }
 }
+
+//  IRQ를 로컬 APIC ID로 전달하도록 변경
+void kRoutingIRQToAPICID( int iIRQ, BYTE bAPICID )
+{
+    int i;
+    IOREDIRECTIONTABLE stEntry;
+
+    // 범위 검사
+    if( iIRQ > IOAPIC_MAXIOREDIRECTIONTABLECOUNT )
+    {
+        return ;
+    }
+
+    // 설정된 I/O 리다이렉션 테이블을 읽어서 목적지(Destination) 필드만 수정
+    kReadIOAPICRedirectionTable( gs_stIOAPICManager.vbIRQToINTINMap[ iIRQ ], &stEntry );
+    stEntry.bDestination = bAPICID;
+    kWriteIOAPICRedirectionTable( gs_stIOAPICManager.vbIRQToINTINMap[ iIRQ ], &stEntry );
+}
