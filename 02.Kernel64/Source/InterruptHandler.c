@@ -198,6 +198,7 @@ void kTimerHandler( int iVectorNumber )
     char vcBuffer[] = "[INT:  , ]";
     static int g_iTimerInterruptCount = 0;
     int iIRQ;
+    BYTE bCurrentAPICID;
 
     //==============================================================================
     //  인터럽트가 발생했음을 알리려고 메시지를 출력하는 부분
@@ -220,19 +221,20 @@ void kTimerHandler( int iVectorNumber )
     kIncreaseInterruptCount( iIRQ );
 
     // IRQ 0 인터럽트 처리를 Bootstrap Processor만 처리
-    if( kGetAPICID() == 0 )
+    bCurrentAPICID = kGetAPICID();
+    if( bCurrentAPICID == 0 )
     {
         // 타이머 발생 횟수를 증가
         g_qwTickCount++;
+    }
 
-        // 태스크가 사용한 프로세서의 시간을 줄임
-        kDecreaseProcessorTime();
-
-        // 프로세서가 사용할 수 있는 시간을 다 썼다면 태스크 전화 수행
-        if( kIsProcessorTimeExpired() == TRUE )
-        {
-            kScheduleInInterrupt();
-        }
+    // 태스크가 사용한 프로세서의 시간을 줄임
+    kDecreaseProcessorTime( bCurrentAPICID );
+    
+    // 프로세서가 사용할 수 있는 시간을 다 썼다면 태스크 전화 수행
+    if( kIsProcessorTimeExpired( bCurrentAPICID ) == TRUE )
+    {
+        kScheduleInInterrupt();
     }
 }
 
@@ -241,6 +243,7 @@ void kDeviceNotAvailableHandler( int iVectorNumber )
 {
     TCB* pstFPUTask, * pstCurrentTask;
     QWORD qwLastFPUTaskID;
+    BYTE bCurrentAPICID;
 
     //==============================================================================
     // FPU 예외가 발생했음을 알리려고 메시지를 출력하는 부분
@@ -256,12 +259,15 @@ void kDeviceNotAvailableHandler( int iVectorNumber )
     kPrintStringXY( 0, 0, vcBuffer );
     //==============================================================================
 
+    // 현재 코어의 로컬 APIC ID를 확인
+    bCurrentAPICID = kGetAPICID();
+
     // CR0 컨트롤 레지스터의 TS 비트를 0으로 설정
     kClearTS();
 
     // 이전에 FPU를 사용한 태스크가 있는지 확인해 있다면 FPU의 상태를 태스크에 저장
-    qwLastFPUTaskID = kGetLastFPUUsedTaskID();
-    pstCurrentTask = kGetRunningTask();
+    qwLastFPUTaskID = kGetLastFPUUsedTaskID( bCurrentAPICID );
+    pstCurrentTask = kGetRunningTask( bCurrentAPICID );
 
     // 이전에 FPU를 사용한 것이 자신이면 아무것도 안함
     if( qwLastFPUTaskID == pstCurrentTask->stLink.qwID )
@@ -291,7 +297,7 @@ void kDeviceNotAvailableHandler( int iVectorNumber )
     }
 
     // FPU를 사용한 태스크 ID를 현재 태스크로 변경
-    kSetLastFPUUsedTaskID( pstCurrentTask->stLink.qwID );
+    kSetLastFPUUsedTaskID( bCurrentAPICID, pstCurrentTask->stLink.qwID );
 }
 
 // 하드 디스크에서 발생하는 인터럽트의 핸들러

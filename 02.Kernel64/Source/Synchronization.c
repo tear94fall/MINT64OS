@@ -30,12 +30,23 @@ void kInitializeMutex( MUTEX* pstMutex )
 //  태스크 사이에서 사용하는 데이터를 위한 잠금 함수
 void kLock( MUTEX* pstMutex )
 {
+    BYTE bCurrentAPICID;
+    BOOL bInterruptFlag;
+
+    // 인터럽트를 비활성화
+    bInterruptFlag = kSetInterruptFlag( FALSE );
+
+    // 현재 코어의 로컬 APIC ID를 확인
+    bCurrentAPICID = kGetAPICID();
+
     // 이미 잠겨 있다면 내가 잠갔는지 확인하고 잠근 횟수를 증가시킨 뒤 종료
     if( kTestAndSet( &( pstMutex->bLockFlag ), 0, 1 ) == FALSE )
     {
         // 자신이 잠갔다면 횟수만 증가시킴
-        if( pstMutex->qwTaskID == kGetRunningTask()->stLink.qwID )
+        if( pstMutex->qwTaskID == kGetRunningTask( bCurrentAPICID )->stLink.qwID )
         {
+            // 인터럽트를 복원
+            kSetInterruptFlag( bInterruptFlag );
             pstMutex->dwLockCount++;
             return ;
         }
@@ -49,15 +60,24 @@ void kLock( MUTEX* pstMutex )
 
     // 잠금 설정, 잠긴 플래그는 위의 kTestAndSet() 함수에서 처리함
     pstMutex->dwLockCount = 1;
-    pstMutex->qwTaskID = kGetRunningTask()->stLink.qwID;
+    pstMutex->qwTaskID = kGetRunningTask( bCurrentAPICID )->stLink.qwID;
+    // 인터럽트를 복원
+    kSetInterruptFlag( bInterruptFlag );
 }
 
 //  태스크 사이에서 사용하는 데이터를 위한 잠금 해제 함수
 void kUnlock( MUTEX* pstMutex )
 {
+    BOOL bInterruptFlag;
+
+    // 인터럽트를 비활성화
+    bInterruptFlag = kSetInterruptFlag( FALSE );
+
     // 뮤텍스를 잠근 태스크가 아니면 실패
-    if( ( pstMutex->bLockFlag == FALSE ) || ( pstMutex->qwTaskID != kGetRunningTask()->stLink.qwID ) )
+    if( ( pstMutex->bLockFlag == FALSE ) || ( pstMutex->qwTaskID != kGetRunningTask( kGetAPICID() )->stLink.qwID ) )
     {
+        // 인터럽트를 복원
+        kSetInterruptFlag( bInterruptFlag );
         return ;
     }
 
@@ -65,13 +85,16 @@ void kUnlock( MUTEX* pstMutex )
     if( pstMutex->dwLockCount > 1 )
     {
         pstMutex->dwLockCount--;
-        return ;
     }
-
-    // 해제된 것으로 설정, 잠긴 플래그를 나중에 해제해야 함
-    pstMutex->qwTaskID = TASK_INVALIDID;
-    pstMutex->dwLockCount = 0;
-    pstMutex->bLockFlag = FALSE;
+    else
+    {
+        // 해제된 것으로 설정, 잠김 플래그를 가장 나중에 해제해야 함
+        pstMutex->qwTaskID = TASK_INVALIDID;
+        pstMutex->dwLockCount = 0;
+        pstMutex->bLockFlag = FALSE;
+    }
+    // 인터럽트를 복원
+    kSetInterruptFlag( bInterruptFlag );
 }
 
 //  스핀락을 초기화

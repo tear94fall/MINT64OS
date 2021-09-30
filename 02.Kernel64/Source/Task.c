@@ -1,8 +1,9 @@
 #include "Task.h"
 #include "Descriptor.h"
+#include "MultiProcessor.h"
 
 // 스케쥴러 관련 자료구조
-static SCHEDULER gs_stScheduler;
+static SCHEDULER gs_vstScheduler[ MAXPROCESSORCOUNT ]; 
 static TCBPOOLMANAGER gs_stTCBPoolManager;
 
 //==============================================================================
@@ -29,6 +30,9 @@ static void kInitializeTCBPool( void )
     // TCB의 최대 개수와 할당된 횟수를 초기화
     gs_stTCBPoolManager.iMaxCount = TASK_MAXCOUNT;
     gs_stTCBPoolManager.iAllocatedCount = 1;
+
+    // 스핀락 초기화
+    kInitializeSpinLock( &gs_stTCBPoolManager.stSpinLock );
 }
 
 //  TCB를 할당받음
@@ -37,8 +41,13 @@ static TCB* kAllocateTCB( void )
     TCB* pstEmptyTCB;
     int i;
 
+    // 동기화 처리
+    kLockForSpinLock( &gs_stTCBPoolManager.stSpinLock );
+
     if( gs_stTCBPoolManager.iUseCount == gs_stTCBPoolManager.iMaxCount )
     {
+        // 동기화 처리
+        kUnlockForSpinLock( &gs_stTCBPoolManager.stSpinLock );
         return NULL;
     }
 
@@ -61,6 +70,9 @@ static TCB* kAllocateTCB( void )
         gs_stTCBPoolManager.iAllocatedCount = 1;
     }
 
+    // 동기화 처리
+    kUnlockForSpinLock( &gs_stTCBPoolManager.stSpinLock );
+
     return pstEmptyTCB;
 }
 
@@ -74,37 +86,49 @@ static void kFreeTCB( QWORD qwID )
 
     // TCB를 초기화하고 ID 설정
     kMemSet( &( gs_stTCBPoolManager.pstStartAddress[ i ].stContext ), 0, sizeof( CONTEXT ) );
+
+    // 동기화 처리
+    kLockForSpinLock( &gs_stTCBPoolManager.stSpinLock );
+
     gs_stTCBPoolManager.pstStartAddress[ i ].stLink.qwID = i;
 
     gs_stTCBPoolManager.iUseCount--;
+
+    // 동기화 처리
+    kUnlockForSpinLock( &gs_stTCBPoolManager.stSpinLock );
 }
 
 //  태스크를 생성
 //      태스크 ID에 따라서 스택 풀어서 스택 자동 할당
-TCB* kCreateTask( QWORD qwFlags, void* pvMemoryAddress, QWORD qwMemorySize, QWORD qwEntryPointAddress )
+//      프로세스와 스레드 모두 생성 가능
+//      bAffinity에 태스크를 수행하고 싶은 코어의 ID를 설정 가능
+TCB* kCreateTask( QWORD qwFlags, void* pvMemoryAddress, QWORD qwMemorySize, QWORD qwEntryPointAddress , BYTE bAffinity )
 {
     TCB* pstTask, * pstProcess;
     void* pvStackAddress;
+    BYTE bCurrentAPICID;
 
-    // 임계 영역 시작
-    kLockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    // 현재 코어의 로컬 APIC ID를 확인
+    bCurrentAPICID = kGetAPICID();
 
+    // 태스크 자료구조 할당
     pstTask = kAllocateTCB();
     if( pstTask == NULL )
     {
-        // 임계 영역 끝
-        kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
         return NULL;
     }
 
+    // 임계 영역 시작
+    kLockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
+
     // 현재 프로세스 또는 스레드가 속한 프로세스를 검색
-    pstProcess = kGetProcessByThread( kGetRunningTask() );
+    pstProcess = kGetProcessByThread( kGetRunningTask( bCurrentAPICID ) );
     // 만약 프로세스가 없다면 아무런 작업도 하지 않음
     if( pstProcess == NULL )
     {
         kFreeTCB( pstTask->stLink.qwID );
         // 임계 영역 끝
-        kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+        kUnlockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
         return NULL;
     }
 
@@ -131,7 +155,7 @@ TCB* kCreateTask( QWORD qwFlags, void* pvMemoryAddress, QWORD qwMemorySize, QWOR
     pstTask->stThreadLink.qwID = pstTask->stLink.qwID;
 
     // 임계 영역 끝
-    kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kUnlockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
 
     // 태스크 ID로 스택 어드레스 계산, 하위 32비트가 스택 풀의 오프셋 역할 수행
     pvStackAddress = ( void* ) ( TASK_STACKPOOLADDRESS + ( TASK_STACKSIZE * GETTCBOFFSET( pstTask->stLink.qwID ) ) );
@@ -145,14 +169,14 @@ TCB* kCreateTask( QWORD qwFlags, void* pvMemoryAddress, QWORD qwMemorySize, QWOR
     // FPU 사용 여부를 사용하지 않은 것으로 초기화
     pstTask->bFPUUsed = FALSE;
 
-    // 임계 영역 시작
-    kLockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    // 현재 코어의 로컬 APIC ID를 태스크에 설정
+    pstTask->bAPICID = bCurrentAPICID;
 
-    // 태스크를 준비 리스트에 삽입
-    kAddTaskToReadyList( pstTask );
+    // 프로세서 친화도를 설정
+    pstTask->bAffinity = bAffinity;
 
-    // 임계 영역 끝
-    kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    // 부하 분산을 고려하여 스케줄러에 태스크를 추가
+    kAddTaskToSchedulerWithLoadBalancing( pstTask );
 
     return pstTask;
 }
@@ -199,23 +223,56 @@ static void kSetUpTask( TCB* pstTCB, QWORD qwFlags, QWORD qwEntryPointAddress, v
 void kInitializeScheduler( void )
 {
     int i;
+    int j;
+    BYTE bCurrentAPICID;
     TCB* pstTask;
 
-    // 태스크를 풀 초기화
-    kInitializeTCBPool();
+    // 현재 코어의 로컬 APIC ID 확인
+    bCurrentAPICID = kGetAPICID();
 
-    // 준비 리스트와 우선 순위별 실행 횟수를 초기화하고 대기 리스트도 초기화
-    for( i = 0 ; i < TASK_MAXREADYLISTCOUNT ; i++ )
+    // Bootstrap Processor만 태스크 풀과 스케줄러 자료구조를 모두 초기화
+    if( bCurrentAPICID == 0 )
     {
-        kInitializeList( &( gs_stScheduler.vstReadyList[ i ] ) );
-        gs_stScheduler.viExecuteCount[ i ] = 0;
+        // 태스크를 풀 초기화
+        kInitializeTCBPool();
+
+        // 준비 리스트와 우선 순위별 실행 횟수를 초기화하고 대기 리스트도 초기화
+        for( j = 0 ; j < MAXPROCESSORCOUNT ; j++ )
+        {
+            // 준비 리스트 초기화
+            for( i = 0 ; i < TASK_MAXREADYLISTCOUNT ; i++ )
+            {
+                kInitializeList( &( gs_vstScheduler[ j ].vstReadyList[ i ] ) );
+                gs_vstScheduler[ j ].viExecuteCount[ i ] = 0;
+            }
+            // 대기 리스트 초기화
+            kInitializeList( &( gs_vstScheduler[ j ].stWaitList ) );
+
+            // 스핀락 초기화
+            kInitializeSpinLock( &( gs_vstScheduler[ j ].stSpinLock ) );
+        }
     }
-    kInitializeList( &( gs_stScheduler.stWaitList ) );
 
     // TCB를 할당받아 부팅을 수행한 태스크를 커널 최초의 프로세스로 설정
     pstTask = kAllocateTCB();
-    gs_stScheduler.pstRunningTask = pstTask;
-    pstTask->qwFlags = TASK_FLAGS_HIGHEST | TASK_FLAGS_PROCESS | TASK_FLAGS_SYSTEM;
+    gs_vstScheduler[ bCurrentAPICID ].pstRunningTask = pstTask;
+    
+    // BSP의 콘솔 쉘이나 유후 태스크는 모두 현재 코어에서만 실행하도록
+    // 로컬 APIC ID와 프로세서 친화도를 현재 코어의 로컬 APIC ID로 설정
+    pstTask->bAPICID = bCurrentAPICID;
+    pstTask->bAffinity = bCurrentAPICID;
+
+    // Bootstrap Processor는 콘솔 쉘을 실행
+    if( bCurrentAPICID == 0 )
+    {
+        pstTask->qwFlags = TASK_FLAGS_HIGHEST | TASK_FLAGS_PROCESS | TASK_FLAGS_SYSTEM;
+    }
+    // Application Processor는 특별히 긴급한 태스크가 없으므로 유후 태스크를 실행
+    else
+    {
+        pstTask->qwFlags = TASK_FLAGS_LOWEST | TASK_FLAGS_PROCESS | TASK_FLAGS_SYSTEM | TASK_FLAGS_IDLE;
+    }
+
     pstTask->qwParentProcessID = pstTask->stLink.qwID;
     pstTask->pvMemoryAddress = ( void* ) 0x100000;
     pstTask->qwMemorySize = 0x500000;
@@ -224,46 +281,43 @@ void kInitializeScheduler( void )
 
 
     // 프로세서 사용률을 계산하는데 사용하는 자료구조 초기화
-    gs_stScheduler.qwSpendProcessorTimeInIdleTask = 0;
-    gs_stScheduler.qwProcessorLoad = 0;
+    gs_vstScheduler[ bCurrentAPICID ].qwSpendProcessorTimeInIdleTask = 0;
+    gs_vstScheduler[ bCurrentAPICID ].qwProcessorLoad = 0;
 
     // FPU를 사용한 태스크 ID를 유효하지 않은 값으로 초기화
-    gs_stScheduler.qwLastFPUUsedTaskID = TASK_INVALIDID;
-
-    // 스핀락 초기화
-    kInitializeSpinLock( &( gs_stScheduler.stSpinLock ) );
+    gs_vstScheduler[ bCurrentAPICID ].qwLastFPUUsedTaskID = TASK_INVALIDID;
 }
 
 //  현재 수행 중인 태스크를 설정
-void kSetRunningTask( TCB* pstTask )
+void kSetRunningTask( BYTE bAPICID, TCB* pstTask )
 {
     // 임계 영역 시작
-    kLockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kLockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
 
-    gs_stScheduler.pstRunningTask = pstTask;
+    gs_vstScheduler[ bAPICID ].pstRunningTask = pstTask;
 
     // 임계 영역 끝
-    kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kUnlockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
 }
 
 //  현재 수행 중인 태스크를 반환
-TCB* kGetRunningTask( void )
+TCB* kGetRunningTask( BYTE bAPICID )
 {
     TCB* pstRunningTask;
 
     // 임계 영역 시작
-    kLockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kLockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
 
-    pstRunningTask = gs_stScheduler.pstRunningTask;
+    pstRunningTask = gs_vstScheduler[ bAPICID ].pstRunningTask;
 
     // 임계 영역 끝
-    kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kUnlockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
 
     return pstRunningTask;
 }
 
 //  태스크 리스트에서 다음으로 실행할 태스크를 얻음
-static TCB* kGetNextTaskToRun( void )
+static TCB* kGetNextTaskToRun( BYTE bAPICID )
 {
     TCB* pstTarget = NULL;
     int iTaskCount, i, j;
@@ -275,19 +329,19 @@ static TCB* kGetNextTaskToRun( void )
         // 높은 우선순위에서 낮은 우선순위까지 리스트를 확인하여 스케줄링할 태스크를 선택
         for( i = 0 ; i < TASK_MAXREADYLISTCOUNT ; i++ )
         {
-            iTaskCount = kGetListCount( &( gs_stScheduler.vstReadyList[ i ] ) );
+            iTaskCount = kGetListCount( &( gs_vstScheduler[ bAPICID ].vstReadyList[ i ] ) );
 
             // 만약 실행한 횟수보다 리스트이 태스크 수가 더 많으면 현재 우선순위의 태스크를 실행함
-            if( gs_stScheduler.viExecuteCount[ i ] < iTaskCount )
+            if( gs_vstScheduler[ bAPICID ].viExecuteCount[ i ] < iTaskCount )
             {
-                pstTarget = ( TCB* ) kRemoveListFromHeader( &( gs_stScheduler.vstReadyList[ i ] ) );
-                gs_stScheduler.viExecuteCount[ i ]++;
+                pstTarget = ( TCB* ) kRemoveListFromHeader( &( gs_vstScheduler[ bAPICID ].vstReadyList[ i ] ) );
+                gs_vstScheduler[ bAPICID ].viExecuteCount[ i ]++;
                 break;
             }
             // 만약 실행한 횟수가 더 많으면 실행 횟수를 초기화하고 다음 우선순위로 양보함
             else
             {
-                gs_stScheduler.viExecuteCount[ i ] = 0;
+                gs_vstScheduler[ bAPICID ].viExecuteCount[ i ] = 0;
             }
         }
 
@@ -301,26 +355,26 @@ static TCB* kGetNextTaskToRun( void )
 }
 
 //  태스크를 스케줄러의 준비 리스트에 삽입
-static BOOL kAddTaskToReadyList( TCB* pstTask )
+static BOOL kAddTaskToReadyList( BYTE bAPICID, TCB* pstTask )
 {
     BYTE bPriority;
 
     bPriority = GETPRIORITY( pstTask->qwFlags );
     if( bPriority == TASK_FLAGS_WAIT )
     {
-        kAddListToTail( &( gs_stScheduler.stWaitList ), pstTask );
+        kAddListToTail( &( gs_vstScheduler[ bAPICID ].stWaitList ), pstTask );
         return TRUE;
     }
     else if( bPriority >= TASK_MAXREADYLISTCOUNT )
     {
         return FALSE;
     }
-    kAddListToTail( &( gs_stScheduler.vstReadyList[ bPriority ] ), pstTask );
+    kAddListToTail( &( gs_vstScheduler[ bAPICID ].vstReadyList[ bPriority ] ), pstTask );
     return TRUE;
 }
 
 //  준비 큐에서 태스크를 제거
-static TCB* kRemoveTaskFromReadyList( QWORD qwTaskID )
+static TCB* kRemoveTaskFromReadyList( BYTE bAPICID, QWORD qwTaskID )
 {
     TCB* pstTarget;
     BYTE bPriority;
@@ -341,27 +395,71 @@ static TCB* kRemoveTaskFromReadyList( QWORD qwTaskID )
     // 태스크가 존재하는 준비 리스트에서 태스크 제거
     bPriority = GETPRIORITY( pstTarget->qwFlags );
 
-    pstTarget = kRemoveList( &( gs_stScheduler.vstReadyList[ bPriority ]), qwTaskID );
+    pstTarget = kRemoveList( &( gs_vstScheduler[ bAPICID ].vstReadyList[ bPriority ]), qwTaskID );
     return pstTarget;
+}
+
+//  태스크가 포함된 스케줄러의 ID를 반환하고, 해당 스케줄러의 스핀락을 잠금
+static BOOL kFindSchedulerOfTaskAndLock( QWORD qwTaskID, BYTE* pbAPICID )
+{
+    TCB* pstTarget;
+    BYTE bAPICID;
+
+    while( 1 )
+    {
+        // 태스크 ID로 태스크 자료구조를 찾아서 어느 스케줄러에서 실행 중인지 확인
+        pstTarget = &( gs_stTCBPoolManager.pstStartAddress[ GETTCBOFFSET( qwTaskID ) ] );
+        if( ( pstTarget == NULL ) || ( pstTarget->stLink.qwID != qwTaskID ) )
+        {
+            return FALSE;
+        }
+
+        // 현재 태스크가 실행되는 코어의 ID를 확인
+        bAPICID = pstTarget->bAPICID;
+
+        // 임계 영역 시작
+        kLockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
+
+        // 스핀락을 획득한 이후 다시 확인하여 같은 코어에서 실행되는지 확인
+        // 태스크가 수행되는 코어를 찾은 후 정확하게 스핀락을 걸기 위해 이중으로 검사
+        pstTarget = &( gs_stTCBPoolManager.pstStartAddress[ GETTCBOFFSET( qwTaskID ) ] );
+        if( pstTarget->bAPICID == bAPICID )
+        {
+            break;
+        }
+
+        // 태스크 자료구조에 저장된 로컬 APIC ID의 값이 스핀락을 획득하기 전과 후가 다르다면,
+        // 스핀락을 획득하는 동안 태스크가 다른 코어로 옮겨간 것임
+        // 따라서 다시 스핀락을 해제하고 옮겨진 코어의 스핀락을 획득해야 함
+        // 임계 영역 끝
+        kUnlockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
+    }
+
+    *pbAPICID = bAPICID;
+    return TRUE;
 }
 
 //  태스크의 우선순위를 변경함
 BOOL kChangePriority( QWORD qwTaskID, BYTE bPriority )
 {
     TCB* pstTarget;
+    BYTE bAPICID;
 
     if( bPriority > TASK_MAXREADYLISTCOUNT )
     {
         return FALSE;
     }
 
-    // 임계 영역 시작
-    kLockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    // 태스크가 포함된 코어의 로컬 APIC ID를 찾은 후 스핀락을 잠금
+    if( kFindSchedulerOfTaskAndLock( qwTaskID, &bAPICID ) == FALSE )
+    {
+        return FALSE;
+    }
 
-    // 현재 실행중인 태스크이면 우선 순위만 변경
+    // 실행중인 태스크이면 우선 순위만 변경
     // PIT 컨트롤러의 인터럽트(IRQ 0)가 발생하여 태스크 전환이 수행될 때 변경된
     // 우선 순위의 리스트로 이동
-    pstTarget = gs_stScheduler.pstRunningTask;
+    pstTarget = gs_vstScheduler[ bAPICID ].pstRunningTask;
     if( pstTarget->stLink.qwID == qwTaskID )
     {
         SETPRIORITY( pstTarget->qwFlags, bPriority );
@@ -370,7 +468,7 @@ BOOL kChangePriority( QWORD qwTaskID, BYTE bPriority )
     else
     {
         // 준비 리스트에서 태스크를 찾지 못하면 직접 태스크를 찾아서 우선 순위를 설정
-        pstTarget = kRemoveTaskFromReadyList( qwTaskID );
+        pstTarget = kRemoveTaskFromReadyList( bAPICID, qwTaskID );
         if( pstTarget == NULL )
         {
             // 태스크 ID로 직접 찾아서 설정
@@ -385,56 +483,61 @@ BOOL kChangePriority( QWORD qwTaskID, BYTE bPriority )
         {
             // 우선 순위를 설정하고 준비 리스트에 다시 삽입
             SETPRIORITY( pstTarget->qwFlags, bPriority );
-            kAddTaskToReadyList( pstTarget );
+            kAddTaskToReadyList( bAPICID, pstTarget );
         }
     }
     // 임계 영역 끝
-    kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kUnlockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
     return TRUE;
 }
 
 //  다른 태스크를 찾아서 전환
 //      인터럽트나 예외가 발생했을 때 호출하면 안됨
-void kSchedule( void )
+BOOL kSchedule( void )
 {
     TCB* pstRunningTask, * pstNextTask;
     BOOL bPreviousInterrupt;
+    BYTE bCurrentAPICID;
 
-    // 전환할 태스크가 있어야 함
-    if( kGetReadyTaskCount() < 1 )
-    {
-        return ;
-    }
-
-    // 전환하는 도중 인터럽트가 발생하여 태스크 전환이 또 일어나면 곤란하므로
-    // 전환하는 동안 인터럽트가 발생하지 못하도록 설정
+    // 전환하는 도중 인터럽트가 발생하여 태스크 전환이 또 일어나면 곤란하므로 전환하는 동안
+    // 인터럽트가 발생하지 못하도록 설정
     bPreviousInterrupt = kSetInterruptFlag( FALSE );
 
+    // 현재 로컬 APIC ID 확인
+    bCurrentAPICID = kGetAPICID();
+
+    // 전환할 태스크가 있어야 함
+    if( kGetReadyTaskCount( bCurrentAPICID ) < 1 )
+    {
+        kSetInterruptFlag( bPreviousInterrupt );
+        return FALSE;
+    }
+
     // 임계 영역 시작
-    kLockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kLockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
 
     // 실행할 다음 태스크를 얻음
-    pstNextTask = kGetNextTaskToRun();
+    pstNextTask = kGetNextTaskToRun( bCurrentAPICID );
     if( pstNextTask == NULL )
     {
         // 임계 영역 끝
-        kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+        kUnlockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
         kSetInterruptFlag( bPreviousInterrupt );
-        return ;
+        return FALSE;
     }
 
     // 현재 수행중인 태스크의 정보를 수정한 뒤 콘텍스트 전환
-    pstRunningTask = gs_stScheduler.pstRunningTask;
-    gs_stScheduler.pstRunningTask = pstNextTask;
+    pstRunningTask = gs_vstScheduler[ bCurrentAPICID ].pstRunningTask;
+    gs_vstScheduler[ bCurrentAPICID ].pstRunningTask = pstNextTask;
 
     // 유휴 태스크에서 전환되었다면 사용한 프로세서 시간을 증가시킴
     if( ( pstRunningTask->qwFlags & TASK_FLAGS_IDLE ) == TASK_FLAGS_IDLE )
     {
-        gs_stScheduler.qwSpendProcessorTimeInIdleTask += TASK_PROCESSORTIME - gs_stScheduler.iProcessorTime;
+        gs_vstScheduler[ bCurrentAPICID ].qwSpendProcessorTimeInIdleTask += TASK_PROCESSORTIME - gs_vstScheduler[ bCurrentAPICID ].iProcessorTime;
     }
 
     // 다음에 수행할 태스크가 FPU를 쓴 태스크가 아니라면 TS 비트 설정
-    if( gs_stScheduler.qwLastFPUUsedTaskID != pstNextTask->stLink.qwID )
+    if( gs_vstScheduler[ bCurrentAPICID ].qwLastFPUUsedTaskID != pstNextTask->stLink.qwID )
     {
         kSetTS();
     }
@@ -443,30 +546,37 @@ void kSchedule( void )
         kClearTS();
     }
 
+    // 프로세서 사용 시간을 업데이트
+    gs_vstScheduler[ bCurrentAPICID ].iProcessorTime = TASK_PROCESSORTIME;
+
     // 태스크 종료 플래그가 설정된 경우 콘텍스트를 저장할 필요가 없으므로, 대기 리스트에
     // 삽입하고 콘텍스트 전환
     if( pstRunningTask->qwFlags & TASK_FLAGS_ENDTASK )
     {
-        kAddListToTail( &( gs_stScheduler.stWaitList ), pstRunningTask );
+        kAddListToTail( &( gs_vstScheduler[ bCurrentAPICID ].stWaitList ), pstRunningTask );
+        
         // 임계 영역 끝
-        kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+        kUnlockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
 
         kSwitchContext( NULL, &( pstNextTask->stContext ) );
     }
     else
     {
-        kAddTaskToReadyList( pstRunningTask );
-        // 임계 영역 끝
-        kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+        kAddTaskToReadyList( bCurrentAPICID, pstRunningTask );
 
+        // 임계 영역 끝
+        kUnlockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
+        
+        // 태스크 전환
         kSwitchContext( &( pstRunningTask->stContext ), &( pstNextTask->stContext ) );
     }
 
     // 프로세스 사용 시간을 업데이트
-    gs_stScheduler.iProcessorTime = TASK_PROCESSORTIME;
+    gs_vstScheduler[ bCurrentAPICID ].iProcessorTime = TASK_PROCESSORTIME;
 
     // 인터럽트 플래그 복원
     kSetInterruptFlag( bPreviousInterrupt );
+    return FALSE;
 }
 
 //  인터럽트가 발생했을 때 다른 태스크를 찾아 전환
@@ -475,16 +585,21 @@ BOOL kScheduleInInterrupt( void )
 {
     TCB* pstRunningTask, * pstNextTask;
     char* pcContextAddress;
+    BYTE bCurrentAPICID;
+    QWORD qwISTStartAddress;
+
+    // 현재 로컬 APIC ID 확인
+    bCurrentAPICID = kGetAPICID();
 
     // 임계 영역 시작
-    kLockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kLockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
 
     // 전환할 태스크가 없으면 종료
-    pstNextTask = kGetNextTaskToRun();
+    pstNextTask = kGetNextTaskToRun( bCurrentAPICID );
     if( pstNextTask == NULL )
     {
         // 임계 영역 끝
-        kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+        kUnlockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
         return FALSE;
     }
 
@@ -492,34 +607,34 @@ BOOL kScheduleInInterrupt( void )
     //  테스크 전환 처리
     //      인터럽트 핸들러에서 저장한 콘텍스트를 다른 콘텍스트로 덮어쓰는 방법으로 처리
     //==============================================================================
-    pcContextAddress = ( char* ) IST_STARTADDRESS + IST_SIZE - sizeof( CONTEXT );
+    // IST의 끝부분부터 코어 0 -> 코어 15 순으로 64KB씩 쓰고 있으므로, 로컬 APIC ID를
+    // 이용해서 IST 어드레스를 계산
+    qwISTStartAddress = IST_STARTADDRESS + IST_SIZE - ( IST_SIZE / MAXPROCESSORCOUNT * bCurrentAPICID );
+    pcContextAddress = ( char* ) qwISTStartAddress - sizeof( CONTEXT );
 
     // 현재 수행 중인 태스크의 정보를 수정한 뒤 콘텍스트 전환
-    pstRunningTask = gs_stScheduler.pstRunningTask;
-    gs_stScheduler.pstRunningTask = pstNextTask;
+    pstRunningTask = gs_vstScheduler[ bCurrentAPICID ].pstRunningTask;
+    gs_vstScheduler[ bCurrentAPICID ].pstRunningTask = pstNextTask;
 
     // 유후 태스크에서 전환되었다면 사용한 프로세서 시간을 증가시킴
     if( ( pstRunningTask->qwFlags & TASK_FLAGS_IDLE ) == TASK_FLAGS_IDLE )
     {
-        gs_stScheduler.qwSpendProcessorTimeInIdleTask += TASK_PROCESSORTIME;
+        gs_vstScheduler[ bCurrentAPICID ].qwSpendProcessorTimeInIdleTask += TASK_PROCESSORTIME;
     }
 
     // 태스크 종료 플래그가 설정된경우 콘텍스트를 저장하지 않고 대기 리스트에만 삽입
     if( pstRunningTask->qwFlags & TASK_FLAGS_ENDTASK )
     {
-        kAddListToTail( &( gs_stScheduler.stWaitList ), pstRunningTask );
+        kAddListToTail( &( gs_vstScheduler[ bCurrentAPICID ].stWaitList ), pstRunningTask );
     }
     // 태스크가 종료되지 않으면 IST에 있는 콘텍스트를 복사하고, 현재 태스크를 준비 리스트로 옮김
     else
     {
         kMemCpy( &( pstRunningTask->stContext ), pcContextAddress, sizeof( CONTEXT ) );
-        kAddTaskToReadyList( pstRunningTask );
     }
-    // 임계 영역 끝
-    kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
 
     // 다음에 수행할 태스크가 FPU를 쓴 태스크가 아니라면 TS 비트 설정
-    if( gs_stScheduler.qwLastFPUUsedTaskID != pstNextTask->stLink.qwID )
+    if( gs_vstScheduler[ bCurrentAPICID ].qwLastFPUUsedTaskID != pstNextTask->stLink.qwID )
     {
         kSetTS();
     }
@@ -528,28 +643,35 @@ BOOL kScheduleInInterrupt( void )
         kClearTS();
     }
 
+    // 임계 영역 끝
+    kUnlockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
+
     // 전환해서 실행할 태스크를 Running Task로 설정하고 콘텍스트를 IST에 복사해서
     // 자동으로 태스크 전환이 일어나도록 함
     kMemCpy( pcContextAddress, &( pstNextTask->stContext ), sizeof( CONTEXT ) );
 
+    // 종료하는 태스크가 아니면 스케줄러에 태스크 추가
+    if( ( pstRunningTask->qwFlags & TASK_FLAGS_ENDTASK ) != TASK_FLAGS_ENDTASK )
+    {
+        // 스케줄러에 태스크를 추가, 부하 분산을 고려함
+        kAddTaskToSchedulerWithLoadBalancing( pstRunningTask );
+    }
+
     // 프로세서 사용 시간을 업데이트
-    gs_stScheduler.iProcessorTime = TASK_PROCESSORTIME;
+    gs_vstScheduler[ bCurrentAPICID ].iProcessorTime = TASK_PROCESSORTIME;
     return TRUE;
 }
 
 //  프로세서를 사용할 수 있는 시간을 하나 줄임
-void kDecreaseProcessorTime( void )
+void kDecreaseProcessorTime( BYTE bAPICID )
 {
-    if( gs_stScheduler.iProcessorTime > 0 )
-    {
-        gs_stScheduler.iProcessorTime--;
-    }
+    gs_vstScheduler[ bAPICID ].iProcessorTime--;
 }
 
 //  프로세서를 사용할 수 있는 시간이 다 되었는지 여부를 반환
-BOOL kIsProcessorTimeExpired( void )
+BOOL kIsProcessorTimeExpired( BYTE bAPICID )
 {
-    if( gs_stScheduler.iProcessorTime <= 0 )
+    if( gs_vstScheduler[ bAPICID ].iProcessorTime <= 0 )
     {
         return TRUE;
     }
@@ -561,95 +683,106 @@ BOOL kEndTask( QWORD qwTaskID )
 {
     TCB* pstTarget;
     BYTE bPriority;
+    BYTE bAPICID;
 
-    // 임계 영역 시작
-    kLockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    // 태스크가 포함된 코어의 로컬 APIC ID를 찾은 후 스핀락을 잠금
+    if( kFindSchedulerOfTaskAndLock( qwTaskID, &bAPICID ) == FALSE )
+    {
+        return FALSE;
+    }
 
     // 현재 실행 중인 태스크면 EndTask 비트를 설정하고 태스크를 전환
-    pstTarget = gs_stScheduler.pstRunningTask;
+    pstTarget = gs_vstScheduler[ bAPICID ].pstRunningTask;
     if( pstTarget->stLink.qwID == qwTaskID )
     {
         pstTarget->qwFlags |= TASK_FLAGS_ENDTASK;
         SETPRIORITY( pstTarget->qwFlags, TASK_FLAGS_WAIT );
 
         // 임계 영역 끝
-        kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+        kUnlockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
 
-        kSchedule();
+        // 현재 스케줄러에서 실행 중인 태스크의 경우만 아래를 적용
+        if( kGetAPICID() == bAPICID )
+        {
+            kSchedule();
 
-        // 태스크가 전환되었으므로 아래 코드는 절대 실행되지 않음
-        while( 1 ) ;
+            // 태스크가 전환되었으므로 아래 코드는 절대 실행되지 않음
+            while( 1 )
+            {
+                ;
+            }
+        }
+
+        return TRUE;
     }
     // 실행 중인 태스크가 아니면 준비 큐에서 직접 찾아서 대기 리스트에 연결
-    else
+    // 준비 리스트에서 태스크를 찾지 못하면 직접 태스크를 찾아서 태스크 종료 비트를 설정
+    pstTarget = kRemoveTaskFromReadyList( bAPICID, qwTaskID );
+    if( pstTarget == NULL )
     {
-        // 준비 리스트에서 태스크를 찾지 못하면 직접 태스크를 찾아서 태스크 종료 비트를 설정
-        pstTarget = kRemoveTaskFromReadyList( qwTaskID );
-        if( pstTarget == NULL )
+        // 태스크 ID로 직접 찾아서 설정
+        pstTarget = kGetTCBInTCBPool( GETTCBOFFSET( qwTaskID ) );
+        if( pstTarget != NULL )
         {
-            // 태스크 ID로 직접 찾아서 설정
-            pstTarget = kGetTCBInTCBPool( GETTCBOFFSET( qwTaskID ) );
-            if( pstTarget != NULL )
-            {
-                pstTarget->qwFlags |= TASK_FLAGS_ENDTASK;
-                SETPRIORITY( pstTarget->qwFlags, TASK_FLAGS_WAIT );
-            }
-            // 임계 영역 끝
-            kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
-            return TRUE;
+            pstTarget->qwFlags |= TASK_FLAGS_ENDTASK;
+            SETPRIORITY( pstTarget->qwFlags, TASK_FLAGS_WAIT );
         }
-        
-        pstTarget->qwFlags |= TASK_FLAGS_ENDTASK;
-        SETPRIORITY( pstTarget->qwFlags, TASK_FLAGS_WAIT );
-        kAddListToTail( &( gs_stScheduler.stWaitList ), pstTarget );
+        // 임계 영역 끝
+        kUnlockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
+        return TRUE;
     }
+    
+    pstTarget->qwFlags |= TASK_FLAGS_ENDTASK;
+    SETPRIORITY( pstTarget->qwFlags, TASK_FLAGS_WAIT );
+    kAddListToTail( &( gs_vstScheduler[ bAPICID ].stWaitList ), pstTarget );
+
     // 임계 영역 끝
-    kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kUnlockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
     return TRUE;
 }
 
 //  태스크가 자신을 종료함
 void kExitTask( void )
 {
-    kEndTask( gs_stScheduler.pstRunningTask->stLink.qwID );
+    kEndTask( gs_vstScheduler[ kGetAPICID() ].pstRunningTask->stLink.qwID );
 }
 
 //  준비 큐에 있는 모든 태스크의 수를 반환
-int kGetReadyTaskCount( void )
+int kGetReadyTaskCount( BYTE bAPICID )
 {
     int iTotalCount = 0;
     int i;
 
     // 임계 영역 시작
-    kLockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kLockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
 
     // 모든 준비 큐를 확인하여 태스크 개수를 구함
     for( i = 0 ; i < TASK_MAXREADYLISTCOUNT ; i++ )
     {
-        iTotalCount += kGetListCount( &( gs_stScheduler.vstReadyList[ i ] ) );
+        iTotalCount += kGetListCount( &( gs_vstScheduler[ bAPICID ].vstReadyList[ i ] ) );
     }
 
     // 임계 영역 끝
-    kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kUnlockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
 
     return iTotalCount;
 }
 
 //  전체 태스크의 수를 반환
-int kGetTaskCount( void )
+int kGetTaskCount( BYTE bAPICID )
 {
     int iTotalCount;
 
     // 준비 큐의 태스크 수를 구한 후 대기 큐의 태스크 수와 현재 수행 중인 태스크 수를 더함
-    iTotalCount = kGetReadyTaskCount();
+    iTotalCount = kGetReadyTaskCount( bAPICID );
 
     // 임계 영역 시작
-    kLockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kLockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
 
-    iTotalCount += kGetListCount( &( gs_stScheduler.stWaitList ) ) + 1;
+    iTotalCount += kGetListCount( &( gs_vstScheduler[ bAPICID ].stWaitList ) ) + 1;
 
     // 임계 영역 끝
-    kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+    kUnlockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
 
     return iTotalCount;
 }
@@ -681,9 +814,9 @@ BOOL kIsTaskExist( QWORD qwID )
 }
 
 //  프로세서의 사용률을 반환
-QWORD kGetProcessorLoad( void )
+QWORD kGetProcessorLoad( BYTE bAPICID )
 {
-    return gs_stScheduler.qwProcessorLoad;
+    return gs_vstScheduler[ bAPICID ].qwProcessorLoad;
 }
 
 //  스레드가 소속된 프로세스를 반환
@@ -710,6 +843,177 @@ static TCB* kGetProcessByThread( TCB* pstThread )
     return pstProcess;
 }
 
+//  각 스케줄러의 태스크 수를 이용하여 적절한 스케줄러에 태스크 추가
+//      부하 분산 기능을 사용하지 않는 경우 현재 코어에 삽입
+//      부하 분산을 사용하지 않는 경우, 태스크가 현재 수행되는 코어에서 계속 수행하므로
+//      pstTask에는 적어도 APIC ID가 설정되어 있어야 함
+void kAddTaskToSchedulerWithLoadBalancing( TCB* pstTask )
+{
+    BYTE bCurrentAPICID;
+    BYTE bTargetAPICID;
+
+    // 태스크가 동작하던 코어의 APIC를 확인
+    bCurrentAPICID = pstTask->bAPICID;
+
+    // 부하 분산 기능을 사용하고, 프로세스 친화도가 모든 코어(0xFF)로
+    // 설정되었으면 부하 분산 수행
+    if( ( gs_vstScheduler[ bCurrentAPICID ].bUseLoadBalancing == TRUE ) && ( pstTask->bAffinity == TASK_LOADBALANCINGID ) )
+    {
+        // 태스크를 추가할 스케줄러를 선택
+        bTargetAPICID = kFindSchedulerOfMinimumTaskCount( pstTask );
+    }
+    // 태스크 부하 분산 기능과 관계 없이 프로세서 친화도 필드에 다른 코어의 APIC ID가
+    // 들어 있으면 해당 스케줄러로 옮겨줌
+    else if( ( pstTask->bAffinity != bCurrentAPICID ) && ( pstTask->bAffinity != TASK_LOADBALANCINGID ) )
+    {
+        bTargetAPICID = pstTask->bAffinity;
+    }
+    // 부하 분산 기능을 사용하지 않는 경우는 현재 스케줄러에 다시 삽입
+    else
+    {
+        bTargetAPICID = bCurrentAPICID;
+    }
+
+    // 임계 영역 시작
+    kLockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
+    // 태스크를 추가할 스케줄러가 현재 스케줄러와 다르면 태스크를 이동
+    // FPU는 공유되지 않으므로 현재 태스크가 FPU를 마지막으로 썼다면 FPU 콘택스트를
+    // 메모리에 저장해야 함
+    if( ( bCurrentAPICID != bTargetAPICID ) && ( pstTask->stLink.qwID == gs_vstScheduler[ bCurrentAPICID ].qwLastFPUUsedTaskID ) )
+    {
+        // FPU를 저장하기 전에 TS 비트를 끄지 않으면, 예외 7(Device Not Available)이
+        // 발생하므로 주의해야 함
+        kClearTS();
+        kSaveFPUContext( pstTask->vqwFPUContext );
+        gs_vstScheduler[ bCurrentAPICID ].qwLastFPUUsedTaskID = TASK_INVALIDID;
+    }
+    // 임계 영역 끝
+    kUnlockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
+
+    // 임계 영역 시작
+    kLockForSpinLock( &( gs_vstScheduler[ bTargetAPICID ].stSpinLock ) );
+
+    // 태스크를 수행할 코어의 APIC ID를 설정하고, 해당 스케줄러에 태스크 삽입
+    pstTask->bAPICID = bTargetAPICID;
+    kAddTaskToReadyList( bTargetAPICID, pstTask );
+
+    // 임계 영역 끝
+    kUnlockForSpinLock( &( gs_vstScheduler[ bTargetAPICID ].stSpinLock ) );
+}
+
+//  태스크를 추가할 스케줄러의 ID를 반환
+//      파라미터로 전달된 태스크 자료구조에는 적어도 플래그와 프로세서 친화도 필드가 채워져 있어야 함
+static BYTE kFindSchedulerOfMinimumTaskCount( const TCB * pstTask )
+{
+    BYTE bPriority;
+    BYTE i;
+    int iCurrentTaskCount;
+    int iMinTaskCount;
+    BYTE bMinCoreIndex;
+    int iTempTaskCount;
+    int iProcessorCount;
+
+    // 코어의 개수를 확인
+    iProcessorCount = kGetProcessorCount();
+
+    // 코어가 하나라면 현재 코어에서 계속 수행
+    if ( iProcessorCount == 1 )
+    {
+        return pstTask->bAPICID;
+    }
+
+    // 우선순위 추출
+    bPriority = GETPRIORITY( pstTask->qwFlags );
+
+    // 태스크가 포함된 스케줄러에서 태스크와 같은 우선순위의 태스크 수를 확인
+    iCurrentTaskCount = kGetListCount( &( gs_vstScheduler[ pstTask->bAPICID ].vstReadyList[ bPriority ] ) );
+
+    // 나머지 코어에서 현재 태스크와 같은 레벨을 검사
+    // 자신과 태스크의 수가 적어도 2 이상 차이 나는 것 중에서 가장 태스크 수가 작은
+    // 스케줄러의 ID를 반환
+    iMinTaskCount = TASK_MAXCOUNT;
+    bMinCoreIndex = pstTask->bAPICID;
+    for( i = 0 ; i < iProcessorCount ; i++ )
+    {
+        if( i == pstTask->bAPICID )
+        {
+            continue;
+        }
+
+        // 모든 스케줄러를 돌면서 확인
+        iTempTaskCount = kGetListCount( &( gs_vstScheduler[ i ].vstReadyList[ bPriority ] ) );
+
+        // 현재 코어와 태스크 수가 2개 이상 차이가 나고 이전까지 태스크 수가 가장 작았던
+        // 코어보다 더 작다면 정보를 갱신함
+        if( ( iTempTaskCount + 2 <= iCurrentTaskCount ) && ( iTempTaskCount < iMinTaskCount ) )
+        {
+            bMinCoreIndex = i;
+            iMinTaskCount = iTempTaskCount;
+        }
+    }
+
+    return bMinCoreIndex;
+}
+
+//  파라미터로 전달된 코어에 태스크 부하 분산 기능 사용 여부를 설정
+BYTE kSetTaskLoadBalancing( BYTE bAPICID, BOOL bUseLoadBalancing )
+{
+    gs_vstScheduler[ bAPICID ].bUseLoadBalancing = bUseLoadBalancing;
+}
+
+//  프로세서 친화도를 변경
+BOOL kChangeProcessorAffinity( QWORD qwTaskID, BYTE bAffinity )
+{
+    TCB* pstTarget;
+    BYTE bAPICID;
+
+    // 태스크가 포함된 코어의 로컬 APIC ID를 찾은 후 스핀락을 잠금
+    if( kFindSchedulerOfTaskAndLock( qwTaskID, &bAPICID ) == FALSE )
+    {
+        return FALSE;
+    }
+
+    // 현재 실행 중인 태스크이면 프로세서 친화도만 변경. 실제 태스크가 옮겨지는 시점은
+    // 태스크 전환이 수행될 때임
+    pstTarget = gs_vstScheduler[ bAPICID ].pstRunningTask;
+    if( pstTarget->stLink.qwID == qwTaskID )
+    {
+        // 프로세서 친화도 변경
+        pstTarget->bAffinity = bAffinity;
+
+        // 임계 영역 끝
+        kUnlockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
+    }
+    // 실행 중인 태스크가 아니면 준비 리스트에서 찾아서 즉시 이동
+    else
+    {
+        // 준비 리스트에서 태스크를 찾지 못하면 직접 태스크를 찾아서 친화도를 설정
+        pstTarget = kRemoveTaskFromReadyList( bAPICID, qwTaskID );
+        if( pstTarget == NULL )
+        {
+            pstTarget = kGetTCBInTCBPool( GETTCBOFFSET( qwTaskID ) );
+            if( pstTarget != NULL )
+            {
+                // 프로세서 친화도 변경
+                pstTarget->bAffinity = bAffinity;
+            }
+        }
+        else
+        {
+            // 프로세서 친화도 변경
+            pstTarget->bAffinity = bAffinity;
+        }
+
+        // 임계 영역 끝
+        kUnlockForSpinLock( &( gs_vstScheduler[ bAPICID ].stSpinLock ) );
+
+        // 프로세서 부하 분산을 고려해서 스케줄러에 등록
+        kAddTaskToSchedulerWithLoadBalancing( pstTarget );
+    }
+
+    return TRUE;
+}
+
 //==============================================================================
 //  유후 태스크 관련
 //==============================================================================
@@ -720,29 +1024,34 @@ void kIdleTask( void )
     TCB* pstTask, * pstChildThread, * pstProcess;
     QWORD qwLastMeasureTickCount, qwLastSpendTickInIdleTask;
     QWORD qwCurrentMeasureTickCount, qwCurrentSpendTickInIdleTask;
+    QWORD qwTaskID, qwChildThreadID;
     int i, iCount;
-    QWORD qwTaskID;
     void* pstThreadLink;
+    BYTE bCurrentAPICID;
+    BYTE bProcessAPICID;
+
+    // 현재 코어의 로컬 APIC ID를 확인
+    bCurrentAPICID = kGetAPICID();
 
     // 프로세서 사용량 계산을 위해 기준 정보를 저장
-    qwLastSpendTickInIdleTask = gs_stScheduler.qwSpendProcessorTimeInIdleTask;
+    qwLastSpendTickInIdleTask = gs_vstScheduler[ bCurrentAPICID ].qwSpendProcessorTimeInIdleTask;
     qwLastMeasureTickCount = kGetTickCount();
 
     while( 1 )
     {
         // 현재 상태를 저장
         qwCurrentMeasureTickCount = kGetTickCount();
-        qwCurrentSpendTickInIdleTask = gs_stScheduler.qwSpendProcessorTimeInIdleTask;
+        qwCurrentSpendTickInIdleTask = gs_vstScheduler[ bCurrentAPICID ].qwSpendProcessorTimeInIdleTask;
 
         // 프로세서 사용량을 계산
         // 100-(유후 태스크가 사용한 프로세서 시간)*100/(시스템 전체에서 사용한 프로세서 시간)
         if( qwCurrentMeasureTickCount - qwLastMeasureTickCount == 0 )
         {
-            gs_stScheduler.qwProcessorLoad = 0;
+            gs_vstScheduler[ bCurrentAPICID ].qwProcessorLoad = 0;
         }
         else
         {
-            gs_stScheduler.qwProcessorLoad = 100 - ( qwCurrentSpendTickInIdleTask - qwLastSpendTickInIdleTask ) * 100 /( qwCurrentMeasureTickCount - qwLastMeasureTickCount );
+            gs_vstScheduler[ bCurrentAPICID ].qwProcessorLoad = 100 - ( qwCurrentSpendTickInIdleTask - qwLastSpendTickInIdleTask ) * 100 /( qwCurrentMeasureTickCount - qwLastMeasureTickCount );
         }
 
         // 현재 상태를 이전 상태에 보관
@@ -750,20 +1059,20 @@ void kIdleTask( void )
         qwLastSpendTickInIdleTask = qwCurrentSpendTickInIdleTask;
 
         // 프로세서의 부하에 따라 쉬게 함
-        kHaltProcessorByLoad();
+        kHaltProcessorByLoad( bCurrentAPICID );
 
         // 대기 큐에 대기 중인 태스크가 있으면 태스크를 종료함
-        if( kGetListCount( &( gs_stScheduler.stWaitList ) ) >= 0 )
+        if( kGetListCount( &( gs_vstScheduler[ bCurrentAPICID ].stWaitList ) ) > 0 )
         {
             while( 1 )
             {
                 // 임계 영역 시작
-                kLockForSpinLock( &( gs_stScheduler.stSpinLock ) );
-                pstTask = kRemoveListFromHeader( &( gs_stScheduler.stWaitList ) );
+                kLockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
+                pstTask = kRemoveListFromHeader( &( gs_vstScheduler[ bCurrentAPICID ].stWaitList ) );
+                kUnlockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
+
                 if( pstTask == NULL )
                 {
-                    // 임계 영역 끝
-                    kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
                     break;
                 }
 
@@ -774,10 +1083,14 @@ void kIdleTask( void )
                     iCount = kGetListCount( &( pstTask->stChildThreadList ) );
                     for( i = 0 ; i < iCount ; i++ )
                     {
+                        // 임계 영역 시작
+                        kLockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
                         // 스레드 링크의 어드레스에서 꺼내 스레드를 종료 시킴
                         pstThreadLink = ( TCB* ) kRemoveListFromHeader( &( pstTask->stChildThreadList ) );
                         if( pstThreadLink == NULL )
                         {
+                            // 임계 영역 끝
+                            kUnlockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
                             break;
                         }
 
@@ -789,19 +1102,25 @@ void kIdleTask( void )
                         // 다시 자식 스레드 리스트에 삽입하여 해당 스레드가 종료될 때
                         // 자식 스레드가 프로세스를 찾아 스스로 리스트에서 제거하도록 함
                         kAddListToTail( &( pstTask->stChildThreadList ), &( pstChildThread->stThreadLink ) );
+                        qwChildThreadID = pstChildThread->stLink.qwID;
+
+                        // 임계 영역 끝
+                        kUnlockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
 
                         // 자식 스레드를 찾아서 종료
-                        kEndTask( pstChildThread->stLink.qwID );
+                        kEndTask( qwChildThreadID );
                     }
 
                     // 아직 자식 스레드가 남아있다면 자식 스레드가 다 종료될 때까지
                     // 기다려야 하므로 다시 대기 리스트에 삽입
                     if( kGetListCount( &( pstTask->stChildThreadList ) ) > 0 )
                     {
-                        kAddListToTail( &( gs_stScheduler.stWaitList ), pstTask );
+                        // 임계 영역 시작
+                        kLockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
+                        kAddListToTail( &( gs_vstScheduler[ bCurrentAPICID ].stWaitList ), pstTask );
 
                         // 임계 영역 끝
-                        kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
+                        kUnlockForSpinLock( &( gs_vstScheduler[ bCurrentAPICID ].stSpinLock ) );
                         continue;
                     }
                     // 프로세스를 종료해야 하므로 할당받은 메모리 영역을 삭제
@@ -816,15 +1135,17 @@ void kIdleTask( void )
                     pstProcess = kGetProcessByThread( pstTask );
                     if( pstProcess != NULL )
                     {
-                        kRemoveList( &( pstProcess->stChildThreadList ), pstTask->stLink.qwID );
+                        if( kFindSchedulerOfTaskAndLock( pstProcess->stLink.qwID, &bProcessAPICID ) == TRUE )
+                        {
+                            kRemoveList( &( pstProcess->stChildThreadList ), pstTask->stLink.qwID );
+                            kUnlockForSpinLock( &( gs_vstScheduler[ bProcessAPICID ].stSpinLock ) );
+                        }
                     }
                 }
 
+                // 여기까지오면 태스크가 정상적으로 종료된 것이르모 태스크 자료구조(TCB)를 반환
                 qwTaskID = pstTask->stLink.qwID;
                 kFreeTCB( qwTaskID );
-                // 임계 영역 끝
-                kUnlockForSpinLock( &( gs_stScheduler.stSpinLock ) );
-
                 kPrintf( "IDLE: Task ID[0x%q] is completely ended.\n", qwTaskID );
             }
         }
@@ -834,20 +1155,20 @@ void kIdleTask( void )
 }
 
 //  측정된 프로세서 부하에 따라 프로세서를 쉬게 함
-void kHaltProcessorByLoad( void )
+void kHaltProcessorByLoad( BYTE bAPICID )
 {
-    if( gs_stScheduler.qwProcessorLoad < 40 )
+    if( gs_vstScheduler[ bAPICID ].qwProcessorLoad < 40 )
     {
         kHlt();
         kHlt();
         kHlt();
     }
-    else if( gs_stScheduler.qwProcessorLoad < 80 )
+    else if( gs_vstScheduler[ bAPICID ].qwProcessorLoad < 80 )
     {
         kHlt();
         kHlt();
     }
-    else if( gs_stScheduler.qwProcessorLoad < 95 )
+    else if( gs_vstScheduler[ bAPICID ].qwProcessorLoad < 95 )
     {
         kHlt();
     }
@@ -857,13 +1178,13 @@ void kHaltProcessorByLoad( void )
 //  FPU 관련
 //==============================================================================
 //  마지막으로 FPU를 사용한 태스크 ID를 반환
-QWORD kGetLastFPUUsedTaskID( void )
+QWORD kGetLastFPUUsedTaskID( BYTE bAPICID )
 {
-    return gs_stScheduler.qwLastFPUUsedTaskID;
+    return gs_vstScheduler[ bAPICID ].qwLastFPUUsedTaskID;
 }
 
 // 마지막으로 FPU를 사용한 태스크 ID를 설정
-void kSetLastFPUUsedTaskID( QWORD qwTaskID )
+void kSetLastFPUUsedTaskID( BYTE bAPICID, QWORD qwTaskID )
 {
-    gs_stScheduler.qwLastFPUUsedTaskID = qwTaskID;
+    gs_vstScheduler[ bAPICID ].qwLastFPUUsedTaskID = qwTaskID;
 }
