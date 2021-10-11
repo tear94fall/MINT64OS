@@ -12,6 +12,7 @@ TOTALSECTORCOUNT:	dw	0x02		; 부트 로더를 제외한 MINT64 OS 이미지의 �
 									; 최대 1152 섹터 (0x90000byte)까지 가능
 KERNEL32SECTORCOUNT: dw 0x02		; 보호 모드 커널의 총 수
 BOOTSTRAPPROCESSOR: db 0x01			; Bootstrap Processor인지 여부
+STARTGRAPHICMODE:	db 0x01			; 그래픽 모드로 시작하는지 여부
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;	코드 영역
@@ -148,7 +149,51 @@ READEND:
 	push 20								; 화면 X 좌표(20)를 스택에 삽입
 	call PRINTMESSAGE					; PRINTMESSAGE 함수 호출
 	add  sp, 6							; 삽입한 파라미터 제거
-	
+
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	; VBE 기능 번호 0x4F01을 호출하여 그래픽 모드에 대한 모드 정보 블록을 구함
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	mov ax, 0x4F01			; VBE 기능 번호 0x4F01를 AX 레지스터에 저장
+	mov cx, 0x117			; 1024x768 해상도에 16비트(R(5):G(6):B(5)) 색 모드 지정
+	mov bx, 0x07E0			; BX 레지스터에 0x07E0를 저장
+	mov es, bx				; ES 세그먼트 레지스터에 BX의 값을 설정하고, DI 레지스터에
+	mov di, 0x00			; 0x00를 설정하여 0x07E0:0000(0x7E00) 어드레스에 모든 정보 블록을 저장
+	int 0x10				; 인터럽트 서비스 수행
+	cmp ax, 0x004F			; 에러가 발생했다면 VBEERROR로 이동
+	jne	VBEERROR
+
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	; VBE 기능 번호 0x4F02을 호출하여 그래픽 모드로 전환
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	; 부트 로더의 그래픽 모드 전환 플래그를 확인하여 1일 때만 그래픽 모드로 전환
+	cmp byte [ STARTGRAPHICMODE ], 0x00			; 그래픽 모드 시작하는지 여부를 0x00과 비교
+	je JUMPTOPROTECTEDMODE						; 0x00과 같다면 바로 보호 모드로 전환
+
+	mov ax, 0x4F02			; VBE 기능 번호 0x4F02를 AX 레지스터에 저장
+	mov bx, 0x4117			; 1024x768 해상도에 16비트(R(5):G(6):B(5)) 색을 사용하는
+							; 선형 프레임 버퍼 모드 지정
+							; VBE 모드 번호(Bit 0-8) = 0x117,
+							; 버퍼 모드(비트 14) = 1(선형 프레임 버퍼 모드)
+	int 0x10				; 인터럽트 서비스 수행
+	cmp ax, 0x004F			; 에러가 발생했다면 VBEERROR로 이동
+	jne VBEERROR
+
+	; 그래픽 모드로 전환되었다면 보호 모드 커널로 이동
+	jmp JUMPTOPROTECTEDMODE
+
+VBEERROR:
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	; 예외 처리
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	; 그래픽 모드 전환이 실패했다는 메시지를 출력
+	push CHANGEGRAPHICMODEFAIL
+	push 2
+	push 0
+	call PRINTMESSAGE
+	add	sp, 6
+	jmp $
+
+JUMPTOPROTECTEDMODE:
 	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	; 로딩한 가상 OS 이미지 실행
 	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -244,6 +289,7 @@ MESSAGE1:	db 'MINT64 OS Boot Loader Start~!!', 0	; 출력할 메시지 정의
 DISKERRORMESSAGE:		db	'DISK Error~!!', 0
 IMAGELOADINGMESSAGE:	db	'OS Image Loading...', 0
 LOADINGCOMPLETEMESSAGE: db	'Complete~!!', 0
+CHANGEGRAPHICMODEFAIL:	db	'Change Graphic Mode Fail~!!', 0
 
 ; 디스크 읽기에 관련된 변수들
 SECTORNUMBER:			db 	0x02		; OS 이미지가 시작하는 섹터 번호를 저장하는 영역
