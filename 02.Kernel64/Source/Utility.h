@@ -26,6 +26,7 @@ int kSPrintf( char* pcBuffer, const char* pcFormatString, ... );
 int kVSPrintf( char* pcBuffer, const char* pcFormatString, va_list ap );
 QWORD kGetTickCount( void );
 void kSleep( QWORD qwMillisecond );
+inline void kMemSetWord( void* pvDestination, WORD wData, int iWordSize );
 
 //  기타
 extern volatile QWORD g_qwTickCount;

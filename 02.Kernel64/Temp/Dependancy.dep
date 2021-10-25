@@ -1,3 +1,5 @@
+2DGraphics.o: ../Source/2DGraphics.c ../Source/2DGraphics.h \
+ ../Source/Types.h ../Source/VBE.h ../Source/Font.h ../Source/Utility.h
 CacheManager.o: ../Source/CacheManager.c ../Source/CacheManager.h \
  ../Source/Types.h ../Source/FileSystem.h ../Source/Synchronization.h \
  ../Source/HardDisk.h ../Source/DynamicMemory.h
@@ -18,6 +20,7 @@ Descriptor.o: ../Source/Descriptor.c ../Source/Descriptor.h \
 DynamicMemory.o: ../Source/DynamicMemory.c ../Source/DynamicMemory.h \
  ../Source/Types.h ../Source/Synchronization.h ../Source/Utility.h \
  ../Source/Task.h ../Source/List.h
+EnglishFont.o: ../Source/EnglishFont.c
 FileSystem.o: ../Source/FileSystem.c ../Source/FileSystem.h \
  ../Source/Types.h ../Source/Synchronization.h ../Source/HardDisk.h \
  ../Source/CacheManager.h ../Source/DynamicMemory.h ../Source/Task.h \
@@ -46,7 +49,7 @@ Main.o: ../Source/Main.c ../Source/Types.h ../Source/Keyboard.h \
  ../Source/List.h ../Source/PIT.h ../Source/DynamicMemory.h \
  ../Source/HardDisk.h ../Source/FileSystem.h ../Source/CacheManager.h \
  ../Source/SerialPort.h ../Source/Queue.h ../Source/MultiProcessor.h \
- ../Source/VBE.h
+ ../Source/VBE.h ../Source/2DGraphics.h
 MultiProcessor.o: ../Source/MultiProcessor.c ../Source/MultiProcessor.h \
  ../Source/Types.h ../Source/MPConfigurationTable.h \
  ../Source/AssemblyUtility.h ../Source/Task.h ../Source/List.h \

@@ -16,6 +16,33 @@ void kMemSet( void* pvDestination, BYTE bData, int iSize )
     }
 }
 
+void kMemSetWord( void* pvDestination, WORD wData, int iWordSize )
+{
+    int i;
+    QWORD qwData;
+    int iRemainWordStartOffset;
+
+    // 8바이트에 WORD 데이터를 채움
+    qwData = 0;
+    for( i = 0 ; i < 4 ; i++ )
+    {
+        qwData = ( qwData << 16 ) | wData;
+    }
+
+    // 8바이트씩 먼저 채움, WORD 데이터를 4개씩 한꺼번에 채울 수 있음
+    for( i = 0 ; i < ( iWordSize / 4 ) ; i++ )
+    {
+        ( ( QWORD* ) pvDestination )[ i ] = qwData;
+    }
+
+    // 8바이트씩 채우고 남은 부분을 마무리
+    iRemainWordStartOffset = i * 4;
+    for( i = 0 ; i < ( iWordSize % 4 ) ; i++ )
+    {
+        ( ( WORD* ) pvDestination )[ iRemainWordStartOffset++ ] = wData;
+    }
+}
+
 //  메모리 복사
 int kMemCpy( void* pvDestination, const void* pvSource, int iSize )
 {
