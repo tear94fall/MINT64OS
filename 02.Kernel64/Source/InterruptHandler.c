@@ -7,6 +7,7 @@
 #include "Descriptor.h"
 #include "AssemblyUtility.h"
 #include "HardDisk.h"
+#include "Mouse.h"
 
 // 인터럽트 핸들러 자료구조
 static INTERRUPTMANAGER gs_stInterruptManager;
@@ -164,6 +165,8 @@ void kKeyboardHandler( int iVectorNumber )
     int iIRQ;
 
     //==============================================================================
+    // 인터럽트가 발생했음을 알리려고 메시지를 출력하는 부분
+    // 인터럽트 벡터를 화면 왼쪽 위에 두 자리 정수로 출력
     vcBuffer[ 5 ] = '0' + iVectorNumber / 10;
     vcBuffer[ 6 ] = '0' + iVectorNumber % 10;
     // 발생한 횟수 출력
@@ -172,11 +175,28 @@ void kKeyboardHandler( int iVectorNumber )
     kPrintStringXY( 0, 0, vcBuffer );
     //==============================================================================
 
-    // 키보드 컨트롤러에서 데이터를 읽어서 ASCII로 변환하여 큐에 삽입
+    // 출력 버퍼(포트 0x60)에 수신된 데이터가 있는지 여부를 확인하여 읽은 데이터를
+    // 키보드 큐 또는 마우스 큐에 삽입
     if( kIsOutputBufferFull() == TRUE )
     {
-        bTemp = kGetKeyboardScanCode();
-        kConvertScanCodeAndPutQueue( bTemp );
+        // 마우스 데이터가 아니면 키보드 큐에 삽입
+        if( kIsMouseDataInOutputBuffer() == FALSE )
+        {
+            // 출력 버퍼(포트 0x60)에서 키보드 스캔 코드를 읽는 용도의 함수지만 키보드와 마우스 데이터는
+            // 출력 버퍼를 공통으로 사용하므로 마우스 데이터를 읽는데도 사용 가능
+            bTemp = kGetKeyboardScanCode();
+            // 키보드 큐에 삽입
+            kConvertScanCodeAndPutQueue( bTemp );
+        }
+        // 마우스 데이터면 마우스 큐에 삽입
+        else
+        {
+            // 출력 버퍼(포트 0x60)에서 키보드 스캔 코드를 읽는 용도의 함수지만 키보드와 마우스 데이터는
+            // 출력 버퍼를 공통으로 사용하므로 마우스 데이터를 읽는데도 사용 가능
+            bTemp = kGetKeyboardScanCode();
+            // 마우스 큐에 삽입
+            kAccumulateMouseDataAndPutQueue( bTemp );
+        }
     }
 
     // 인터럽트 벡터에서 IRQ 번호 추출
@@ -324,6 +344,62 @@ void kHDDHandler( int iVectorNumber )
     kSetHDDInterruptFlag( TRUE, TRUE );
 
     // 인터럽트 벡터에서 IRQ 번호를 추출
+    iIRQ = iVectorNumber - PIC_IRQSTARTVECTOR;
+
+    // EOI 전송
+    kSendEOI( iIRQ );
+
+    // 인터럽트 발생 횟수를 업데이트
+    kIncreaseInterruptCount( iIRQ );
+
+    // 부하 분산(Load Balancing) 처리
+    kProcessLoadBalancing( iIRQ );
+}
+
+//  마우스 인터럽트의 핸들러
+void kMouseHandler( int iVectorNumber )
+{
+    char vcBuffer[] = "[INT:  , ]";
+    static int g_iMouseInterruptCount = 0;
+    BYTE bTemp;
+    int iIRQ;
+
+    //==============================================================================
+    // 인터럽트가 발생했음을 알리려고 메시지를 출력하는 부분
+    // 인터럽트 벡터를 화면 왼쪽 위에 두 자리 정수로 출력
+    vcBuffer[ 5 ] = '0' + iVectorNumber / 10;
+    vcBuffer[ 6 ] = '0' + iVectorNumber % 10;
+    // 발생한 횟수 출력
+    vcBuffer[ 8 ] = '0' + g_iMouseInterruptCount;
+    g_iMouseInterruptCount = ( g_iMouseInterruptCount + 1 ) % 10;
+    kPrintStringXY( 0, 0, vcBuffer );
+    //==============================================================================
+    
+    // 출력 버퍼(포트 0x60)에 수신된 데이터가 있는지 여부를 확인하여 읽은 데이터를
+    // 키보드 큐 또는 마우스 큐에 삽입
+    if( kIsOutputBufferFull() == TRUE )
+    {
+        // 마우스 데이터가 아니면 키보드 큐에 삽입
+        if( kIsMouseDataInOutputBuffer() == FALSE )
+        {
+            // 출력 버퍼(포트 0x60)에서 키보드 스캔 코드를 읽는 용도의 함수지만 키보드와 마우스 데이터는
+            // 출력 버퍼를 공통으로 사용하므로 마우스 데이터를 읽는데도 사용 가능
+            bTemp = kGetKeyboardScanCode();
+            // 키보드 큐에 삽입
+            kConvertScanCodeAndPutQueue( bTemp );
+        }
+        // 마우스 데이터면 마우스 큐에 삽입
+        else
+        {
+            // 출력 버퍼(포트 0x60)에서 키보드 스캔 코드를 읽는 용도의 함수지만 키보드와 마우스 데이터는
+            // 출력 버퍼를 공통으로 사용하므로 마우스 데이터를 읽는데도 사용 가능
+            bTemp = kGetKeyboardScanCode();
+            // 마우스 큐에 삽입
+            kAccumulateMouseDataAndPutQueue( bTemp );
+        }
+    }
+
+    // 인터럽트 벡터에서 IRQ 번호 추출
     iIRQ = iVectorNumber - PIC_IRQSTARTVECTOR;
 
     // EOI 전송

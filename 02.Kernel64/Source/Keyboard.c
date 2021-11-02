@@ -32,12 +32,13 @@ BOOL kIsInputBufferFull( void )
 }
 
 //  ACK를 기다림
-//      ACK가 아닌 다른 스캔 코드는 변환해서 큐에 삽입
+//      ACK가 아닌 다른 코드는 키보드 데이터와 마우스 데이터를 구분하여 큐에 삽입
 BOOL kWaitForACKAndPutOtherScanCode( void )
 {
     int i, j;
     BYTE bData;
     BOOL bResult = FALSE;
+    BOOL bMouseData;
 
     // ACK가 오기전에 키보드 출력 버퍼(포트 0x60)에 키 데이터가 저장될 수 있으므로
     // 키보드에서 전달된 데이터를 최대 100개 까지 수신하여 ACK 확인
@@ -53,6 +54,18 @@ BOOL kWaitForACKAndPutOtherScanCode( void )
                 break;
             }
         }
+
+        // 출력 버퍼(포트 0x60)을 읽기 전에 먼저 상태 레지스터(포트 0x64)를 읽어서
+        // 마우스 데이터인지를 확인
+        if( kIsMouseDataInOutputBuffer() == TRUE )
+        {
+            bMouseData = TRUE;
+        }
+        else
+        {
+            bMouseData = FALSE;
+        }
+
         // 출력 버퍼(포트 0x60)에서 읽은 데이터가 ACK(0xFA)이면 성공
         bData = kInPortByte( 0x60 );
         if( bData == 0xFA )
@@ -60,10 +73,17 @@ BOOL kWaitForACKAndPutOtherScanCode( void )
             bResult = TRUE;
             break;
         }
-        // ACK(0xFA)가 아니면 ASCII 코드로 변환하여 키 큐에 삽입
+        // ACK(0xFA)가 아니면 데이터가 수신된 디바이스에 따라 키보드 큐나 마우스 큐에 삽입
         else
         {
-            kConvertScanCodeAndPutQueue( bData );
+            if( bMouseData == FALSE )
+            {
+                kConvertScanCodeAndPutQueue( bData );
+            }
+            else
+            {
+                kAccumulateMouseDataAndPutQueue( bData );
+            }
         }
     }
 

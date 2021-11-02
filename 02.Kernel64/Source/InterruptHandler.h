@@ -36,5 +36,6 @@ void kKeyboardHandler( int iVectorNumber );
 void kTimerHandler( int iVectorNumber );
 void kDeviceNotAvailableHandler( int iVectorNumber );
 void kHDDHandler( int iVectorNumber );
+void kMouseHandler( int iVectorNumber );
 
 #endif /*__INTERRUPTHANDLER_H__*/
