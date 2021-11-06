@@ -50,7 +50,7 @@ Main.o: ../Source/Main.c ../Source/Types.h ../Source/Keyboard.h \
  ../Source/HardDisk.h ../Source/FileSystem.h ../Source/CacheManager.h \
  ../Source/SerialPort.h ../Source/Queue.h ../Source/MultiProcessor.h \
  ../Source/VBE.h ../Source/2DGraphics.h ../Source/MPConfigurationTable.h \
- ../Source/Mouse.h
+ ../Source/WindowManagerTask.h
 Mouse.o: ../Source/Mouse.c ../Source/Mouse.h ../Source/Types.h \
  ../Source/Synchronization.h ../Source/Keyboard.h ../Source/Queue.h \
  ../Source/AssemblyUtility.h ../Source/Task.h ../Source/List.h
@@ -78,3 +78,11 @@ Utility.o: ../Source/Utility.c ../Source/Utility.h ../Source/Types.h \
  ../Source/AssemblyUtility.h ../Source/Task.h ../Source/List.h \
  ../Source/Synchronization.h
 VBE.o: ../Source/VBE.c ../Source/VBE.h ../Source/Types.h
+Window.o: ../Source/Window.c ../Source/Window.h ../Source/Types.h \
+ ../Source/Synchronization.h ../Source/2DGraphics.h ../Source/List.h \
+ ../Source/VBE.h ../Source/Task.h ../Source/Font.h \
+ ../Source/DynamicMemory.h
+WindowManagerTask.o: ../Source/WindowManagerTask.c ../Source/Types.h \
+ ../Source/Window.h ../Source/Synchronization.h ../Source/2DGraphics.h \
+ ../Source/List.h ../Source/WindowManagerTask.h ../Source/VBE.h \
+ ../Source/Mouse.h ../Source/Task.h

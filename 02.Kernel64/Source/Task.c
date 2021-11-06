@@ -394,6 +394,10 @@ static TCB* kRemoveTaskFromReadyList( BYTE bAPICID, QWORD qwTaskID )
 
     // 태스크가 존재하는 준비 리스트에서 태스크 제거
     bPriority = GETPRIORITY( pstTarget->qwFlags );
+    if( bPriority >= TASK_MAXREADYLISTCOUNT )
+    {
+        return NULL;
+    }    
 
     pstTarget = kRemoveList( &( gs_vstScheduler[ bAPICID ].vstReadyList[ bPriority ]), qwTaskID );
     return pstTarget;

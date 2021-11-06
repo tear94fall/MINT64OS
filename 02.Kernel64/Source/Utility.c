@@ -9,10 +9,27 @@ volatile QWORD g_qwTickCount = 0;
 void kMemSet( void* pvDestination, BYTE bData, int iSize )
 {
     int i;
+    QWORD qwData;
+    int iRemainByteStartOffset;
 
-    for( i = 0 ; i < iSize ; i++ )
+    // 8 바이트 데이터를 채움
+    qwData = 0;
+    for( i = 0 ; i < 8 ; i++ )
     {
-        ( ( char* ) pvDestination )[ i ] = bData;
+        qwData = ( qwData << 8 ) | bData;
+    }
+
+    // 8 바이트씩 먼저 채움
+    for( i = 0 ; i < ( iSize / 8 ) ; i++ )
+    {
+        ( ( QWORD* ) pvDestination )[ i ] = qwData;
+    }
+
+    // 8 바이트씩 채우고 남은 부분을 마무리
+    iRemainByteStartOffset = i * 8;
+    for( i = 0 ; i < ( iSize % 8 ) ; i++ )
+    {
+        ( ( char* ) pvDestination )[ iRemainByteStartOffset++ ] = bData;
     }
 }
 
@@ -47,29 +64,60 @@ void kMemSetWord( void* pvDestination, WORD wData, int iWordSize )
 int kMemCpy( void* pvDestination, const void* pvSource, int iSize )
 {
     int i;
+    int iRemainByteStartOffset;
 
-    for( i = 0 ; i < iSize ; i++ )
+    // 8바이트씩 먼저 복사
+    for( i = 0 ; i < ( iSize / 8 ) ; i++ )
     {
-        ( ( char* )pvDestination )[ i ] = ( ( char* ) pvSource )[ i ];
+        ( ( QWORD* ) pvDestination )[ i ] = ( ( QWORD* ) pvSource )[ i ];
     }
 
-    return iSize;
+    // 8바이트씩 채우고 남은 부분 마무리
+    iRemainByteStartOffset = i * 8;
+    for( i = 0 ; i < ( iSize % 8 ) ; i++ )
+    {
+        ( ( char* ) pvDestination )[ iRemainByteStartOffset ] = ( ( char* ) pvSource )[ iRemainByteStartOffset ];
+        iRemainByteStartOffset++;
+    }
 }
 
 int kMemCmp( const void* pvDestination, const void* pvSource, int iSize )
 {
-    int i;
-    char cTemp;
-
-    for( i = 0 ; i < iSize ; i++ )
+    int i, j;
+    int iRemainByteStartOffset;
+    QWORD qwValue;
+    char cValue;
+    
+    // 8 바이트씩 먼저 비교
+    for( i = 0 ; i < ( iSize / 8 ) ; i++ )
     {
-        cTemp = ( ( char* ) pvDestination )[ i ] - ( ( char* ) pvSource )[ i ];
-        if( cTemp != 0 )
+        qwValue = ( ( QWORD* ) pvDestination )[ i ] - ( ( QWORD* ) pvSource )[ i ];
+
+        // 틀린 위치를 정확하게 찾아서 그 값을 반환
+        if( qwValue != 0 )
         {
-            return ( int ) cTemp;
+            for( i = 0 ; i < 8 ; i++ )
+            {
+                if( ( ( qwValue >> ( i * 8 ) ) & 0xFF ) != 0 )
+                {
+                    return ( qwValue >> ( i * 8 ) ) & 0xFF;
+                }
+            }
         }
     }
-
+    
+    // 8 바이트씩 채우고 남은 부분을 마무리
+    iRemainByteStartOffset = i * 8;
+    for( i = 0 ; i < ( iSize % 8 ) ; i++ )
+    {
+        cValue = ( ( char* ) pvDestination )[ iRemainByteStartOffset ] - ( ( char* ) pvSource )[ iRemainByteStartOffset ];
+        if( cValue != 0 )
+        {
+            return cValue;
+        }
+        iRemainByteStartOffset++;
+    }
+    
     return 0;
 }
 

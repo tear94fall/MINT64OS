@@ -2597,7 +2597,7 @@ static void kShowVBEModeInfo( const char* pcParameterBuffer )
 
     // 해상도와 색 정보를 위주로 출력
     kPrintf( "Red Mask Size: %d, Field Position: %d\n", pstModeInfo->bRedMaskSize, pstModeInfo->bRedFieldPosition );
-    kPrintf( "Green Mask Size: %d, Field Position: %d\n", pstModeInfo->bGreenMaskSize, pstModeInfo->bGReenFieldPosition );
+    kPrintf( "Green Mask Size: %d, Field Position: %d\n", pstModeInfo->bGreenMaskSize, pstModeInfo->bGreenFieldPosition );
     kPrintf( "Blue Mask Size: %d, Field Position: %d\n", pstModeInfo->bBlueMaskSize, pstModeInfo->bBlueFieldPosition );
     kPrintf( "Physical Base Pointer: 0x%X\n", pstModeInfo->dwPhysicalBasePointer );
 

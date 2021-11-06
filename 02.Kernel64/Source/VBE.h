@@ -7,7 +7,7 @@
 // 모든 정보 블록이 저장된 어드레스
 #define VBE_MODEINFOBLOCKADDRESS                0x7E00
 // 그래픽 모드로 시작하는 플래그가 저장된 어드레스
-#define VBE_STARTGRAPHICMODEFLAGADRRESS         0x7C0A
+#define VBE_STARTGRAPHICMODEFLAGADDRESS         0x7C0A
 
 // 구조체
 #pragma pack( push, 1 )
@@ -47,12 +47,12 @@ typedef struct kVBEInfoBlockStruct
     BYTE bRedMaskSize;              // 빨간색 필드가 차지하는 크기
     BYTE bRedFieldPosition;         // 빨간색 필드의 위치
     BYTE bGreenMaskSize;            // 녹색 필드가 차지하는 크기
-    BYTE bGReenFieldPosition;       // 녹색 필드의 위치
+    BYTE bGreenFieldPosition;       // 녹색 필드의 위치
     BYTE bBlueMaskSize;             // 파란색 필드가 차지하는 크기
     BYTE bBlueFieldPosition;        // 파란색 필드의 위치
     BYTE bReservedMaskSize;         // 예약된 필드의 크기
     BYTE bReservedFieldPosition;    // 예약된 필드의 위치
-    BYTE bDirectColorModeINfo;      // 다이렉트 컬러 모드의 정보
+    BYTE bDirectColorModeInfo;      // 다이렉트 컬러 모드의 정보
 
     //==============================================================================
     // VBE 버전 2.0 이상 공통인 부분

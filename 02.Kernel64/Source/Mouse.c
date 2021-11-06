@@ -39,6 +39,9 @@ BOOL kActivateMouse( void )
     // 인터럽트 불가
     bPreviousInterrupt = kSetInterruptFlag( FALSE );
 
+    // 컨트롤 레지스터(포트 0x64)에 마우스 활성화 커맨드(0xA8)를 전달하여 마우스 디바이스 활성화
+    kOutPortByte( 0x64, 0xA8 );
+
     // 컨트롤 레지스터(포트 0x64)에 마우스로 데이터를 전송하는 커맨드(0xD4)를 전달하여
     // 입력 버퍼(포트 0x60)로 전달된 데이터를 마우스로 전송
     kOutPortByte( 0x64, 0xD4 );
@@ -68,7 +71,7 @@ BOOL kActivateMouse( void )
 }
 
 //  마우스 인터럽트를 활성화
-BOOL kEnableMouseInterrupt( void )
+void kEnableMouseInterrupt( void )
 {
     BYTE bOutputPortData;
     int i;
@@ -78,10 +81,10 @@ BOOL kEnableMouseInterrupt( void )
     kOutPortByte( 0x64, 0x20 );
 
     // 출력 포트의 데이터를 기다렸다가 읽음
-    for( i = 0 ; i < 0xFFF ; i++ )
+    for( i = 0 ; i < 0xFFFF ; i++ )
     {
         // 출력 버퍼(포트 0x60)가 차 있으면 데이터를 읽을 수 있음
-        if( kIsInputBufferFull() == TRUE )
+        if( kIsOutputBufferFull() == TRUE )
         {
             break;
         }

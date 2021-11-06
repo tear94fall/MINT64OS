@@ -45,7 +45,7 @@ typedef struct kMouseManagerStruct
 BOOL kInitializeMouse( void );
 BOOL kAccumulateMouseDataAndPutQueue( BYTE bMouseData );
 BOOL kActivateMouse( void );
-BOOL kEnableMouseInterrupt( void );
+void kEnableMouseInterrupt( void );
 BOOL kIsMouseDataInOutputBuffer( void );
 BOOL kGetMouseDataFromMouseQueue( BYTE* pbButtonStatus, int* piRelativeX, int* piRelativeY );
 
