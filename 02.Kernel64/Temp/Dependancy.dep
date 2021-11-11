@@ -7,24 +7,28 @@ Console.o: ../Source/Console.c ../Source/Console.h ../Source/Types.h \
  ../Source/Keyboard.h ../Source/Synchronization.h
 ConsoleShell.o: ../Source/ConsoleShell.c ../Source/ConsoleShell.h \
  ../Source/Types.h ../Source/Console.h ../Source/Keyboard.h \
- ../Source/Synchronization.h ../Source/Utility.h ../Source/PIT.h \
- ../Source/RTC.h ../Source/AssemblyUtility.h ../Source/Task.h \
- ../Source/List.h ../Source/DynamicMemory.h ../Source/HardDisk.h \
- ../Source/FileSystem.h ../Source/CacheManager.h ../Source/SerialPort.h \
- ../Source/Queue.h ../Source/MPConfigurationTable.h ../Source/LocalAPIC.h \
+ ../Source/Synchronization.h ../Source/Utility.h ../Source/VBE.h \
+ ../Source/PIT.h ../Source/RTC.h ../Source/AssemblyUtility.h \
+ ../Source/Task.h ../Source/List.h ../Source/DynamicMemory.h \
+ ../Source/HardDisk.h ../Source/FileSystem.h ../Source/CacheManager.h \
+ ../Source/SerialPort.h ../Source/Queue.h \
+ ../Source/MPConfigurationTable.h ../Source/LocalAPIC.h \
  ../Source/MultiProcessor.h ../Source/IOAPIC.h \
- ../Source/InterruptHandler.h ../Source/VBE.h
+ ../Source/InterruptHandler.h
 Descriptor.o: ../Source/Descriptor.c ../Source/Descriptor.h \
- ../Source/Types.h ../Source/Utility.h ../Source/ISR.h \
+ ../Source/Types.h ../Source/Utility.h ../Source/VBE.h ../Source/ISR.h \
  ../Source/MultiProcessor.h
 DynamicMemory.o: ../Source/DynamicMemory.c ../Source/DynamicMemory.h \
  ../Source/Types.h ../Source/Synchronization.h ../Source/Utility.h \
- ../Source/Task.h ../Source/List.h
+ ../Source/VBE.h ../Source/Task.h ../Source/List.h
 EnglishFont.o: ../Source/EnglishFont.c
 FileSystem.o: ../Source/FileSystem.c ../Source/FileSystem.h \
  ../Source/Types.h ../Source/Synchronization.h ../Source/HardDisk.h \
  ../Source/CacheManager.h ../Source/DynamicMemory.h ../Source/Task.h \
- ../Source/List.h ../Source/Utility.h ../Source/RAMDisk.h
+ ../Source/List.h ../Source/Utility.h ../Source/VBE.h ../Source/RAMDisk.h
+GUITask.o: ../Source/GUITask.c ../Source/GUITask.h ../Source/Types.h \
+ ../Source/Window.h ../Source/Synchronization.h ../Source/2DGraphics.h \
+ ../Source/List.h ../Source/Queue.h ../Source/Keyboard.h
 HardDisk.o: ../Source/HardDisk.c ../Source/HardDisk.h ../Source/Types.h \
  ../Source/Synchronization.h
 IOAPIC.o: ../Source/IOAPIC.c ../Source/IOAPIC.h ../Source/Types.h \
@@ -33,7 +37,7 @@ InterruptHandler.o: ../Source/InterruptHandler.c \
  ../Source/InterruptHandler.h ../Source/Types.h \
  ../Source/MultiProcessor.h ../Source/PIC.h ../Source/Keyboard.h \
  ../Source/Synchronization.h ../Source/Console.h ../Source/Utility.h \
- ../Source/Task.h ../Source/List.h ../Source/Descriptor.h \
+ ../Source/VBE.h ../Source/Task.h ../Source/List.h ../Source/Descriptor.h \
  ../Source/AssemblyUtility.h ../Source/HardDisk.h ../Source/Mouse.h
 Keyboard.o: ../Source/Keyboard.c ../Source/Types.h \
  ../Source/AssemblyUtility.h ../Source/Task.h ../Source/List.h \
@@ -63,20 +67,21 @@ PIT.o: ../Source/PIT.c ../Source/PIT.h ../Source/Types.h
 Queue.o: ../Source/Queue.c ../Source/Queue.h ../Source/Types.h
 RAMDisk.o: ../Source/RAMDisk.c ../Source/RAMDisk.h ../Source/Types.h \
  ../Source/Synchronization.h ../Source/HardDisk.h ../Source/Utility.h \
- ../Source/DynamicMemory.h
+ ../Source/VBE.h ../Source/DynamicMemory.h
 RTC.o: ../Source/RTC.c ../Source/RTC.h ../Source/Types.h
 SerialPort.o: ../Source/SerialPort.c ../Source/SerialPort.h \
  ../Source/Types.h ../Source/Queue.h ../Source/Synchronization.h \
- ../Source/Utility.h
+ ../Source/Utility.h ../Source/VBE.h
 Synchronization.o: ../Source/Synchronization.c \
  ../Source/Synchronization.h ../Source/Types.h ../Source/Utility.h \
- ../Source/Task.h ../Source/List.h ../Source/AssemblyUtility.h
+ ../Source/VBE.h ../Source/Task.h ../Source/List.h \
+ ../Source/AssemblyUtility.h
 Task.o: ../Source/Task.c ../Source/Task.h ../Source/Types.h \
  ../Source/List.h ../Source/Synchronization.h ../Source/Descriptor.h \
  ../Source/MultiProcessor.h
 Utility.o: ../Source/Utility.c ../Source/Utility.h ../Source/Types.h \
- ../Source/AssemblyUtility.h ../Source/Task.h ../Source/List.h \
- ../Source/Synchronization.h
+ ../Source/VBE.h ../Source/AssemblyUtility.h ../Source/Task.h \
+ ../Source/List.h ../Source/Synchronization.h
 VBE.o: ../Source/VBE.c ../Source/VBE.h ../Source/Types.h
 Window.o: ../Source/Window.c ../Source/Window.h ../Source/Types.h \
  ../Source/Synchronization.h ../Source/2DGraphics.h ../Source/List.h \
@@ -86,4 +91,4 @@ WindowManagerTask.o: ../Source/WindowManagerTask.c ../Source/Types.h \
  ../Source/Window.h ../Source/Synchronization.h ../Source/2DGraphics.h \
  ../Source/List.h ../Source/Queue.h ../Source/Keyboard.h \
  ../Source/WindowManagerTask.h ../Source/VBE.h ../Source/Mouse.h \
- ../Source/Task.h
+ ../Source/Task.h ../Source/GUITask.h

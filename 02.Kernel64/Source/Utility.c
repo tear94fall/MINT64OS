@@ -1,6 +1,7 @@
 #include "Utility.h"
 #include "AssemblyUtility.h"
 #include <stdarg.h>
+#include "VBE.h"
 
 // PIT 컨트롤러가 발생한 횟수를 저장할 카운터
 volatile QWORD g_qwTickCount = 0;
@@ -546,4 +547,16 @@ void kSleep( QWORD qwMillisecond )
     {
         kSchedule();
     }
+}
+
+//  그래픽 모드인지 여부를 반환
+BOOL kIsGraphicMode( void )
+{
+    // 그래픽 모드 시작 여부가 저장된 어드레스(0x7C0A)
+    if( *( BYTE* ) VBE_STARTGRAPHICMODEFLAGADDRESS == 0 )
+    {
+        return FALSE;
+    }
+
+    return TRUE;
 }

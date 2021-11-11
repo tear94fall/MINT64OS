@@ -3,6 +3,7 @@
 
 #include <stdarg.h>
 #include "Types.h"
+#include "VBE.h"
 
 //  매크로
 #define MIN( x, y )     ( ( ( x ) < ( y ) ) ? ( x ) : ( y ) )
@@ -10,6 +11,7 @@
 
 //  함수
 void kMemSet( void* pvDestination, BYTE bData, int iSize );
+inline void kMemSetWord( void* pvDestination, WORD wData, int iWordSize );
 int kMemCpy( void* pvDestination, const void* pvSource, int iSize );
 int kMemCmp( const void* pvDestination, const void* pvSource, int iSize );
 BOOL kSetInterruptFlag( BOOL bEnableInterrupt );
@@ -26,7 +28,7 @@ int kSPrintf( char* pcBuffer, const char* pcFormatString, ... );
 int kVSPrintf( char* pcBuffer, const char* pcFormatString, va_list ap );
 QWORD kGetTickCount( void );
 void kSleep( QWORD qwMillisecond );
-inline void kMemSetWord( void* pvDestination, WORD wData, int iWordSize );
+BOOL kIsGraphicMode( void );
 
 //  기타
 extern volatile QWORD g_qwTickCount;
