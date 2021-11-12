@@ -86,9 +86,9 @@ VBE.o: ../Source/VBE.c ../Source/VBE.h ../Source/Types.h
 Window.o: ../Source/Window.c ../Source/Window.h ../Source/Types.h \
  ../Source/Synchronization.h ../Source/2DGraphics.h ../Source/List.h \
  ../Source/Queue.h ../Source/Keyboard.h ../Source/VBE.h ../Source/Task.h \
- ../Source/Font.h ../Source/DynamicMemory.h
+ ../Source/Font.h ../Source/DynamicMemory.h ../Source/Utility.h
 WindowManagerTask.o: ../Source/WindowManagerTask.c ../Source/Types.h \
  ../Source/Window.h ../Source/Synchronization.h ../Source/2DGraphics.h \
  ../Source/List.h ../Source/Queue.h ../Source/Keyboard.h \
  ../Source/WindowManagerTask.h ../Source/VBE.h ../Source/Mouse.h \
- ../Source/Task.h ../Source/GUITask.h
+ ../Source/Task.h ../Source/GUITask.h ../Source/Font.h

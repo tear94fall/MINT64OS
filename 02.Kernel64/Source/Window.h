@@ -88,6 +88,9 @@
 #define EVENT_WINDOWMANAGER_UPDATESCREENBYWINDOWAREA    16
 #define EVENT_WINDOWMANAGER_UPDATESCREENBYSCREENAREA    17
 
+// 화면에 업데이트할 때 이전에 업데이트한 영역을 저장해둘 개수
+#define WINDOW_OVERLAPPEDAREALOGMAXCOUNT                 20
+
 // 구조체
 // 마우스 이벤트 자료구조
 typedef struct kMouseEventStruct
@@ -223,7 +226,19 @@ typedef struct kWindowManagerStruct
     // 이동 중인 윈도우의 ID와 윈도우 이동 모드
     QWORD qwMovingWindowID;
     BOOL bWindowMoveMode;
+
+    // 화면 업데이트용 비트맵 버퍼의 어드레스
+    BYTE* pbDrawBitmap;
 } WINDOWMANAGER;
+
+// 화면에 업데이트할 영역의 비트맵 정보를 저장하는 자료구조
+typedef struct kDrawBitmapStruct
+{
+    // 업데이트할 화면 영역
+    RECT stArea;
+    // 화면 영역의 정보가 저장된 비트맵의 어드레스
+    BYTE* pbBitmap;
+} DRAWBITMAP;
 
 // 함수
 // 윈도우 풀 관련
@@ -242,8 +257,8 @@ BOOL kDeleteAllWindowInTaskID( QWORD qwTaskID );
 WINDOW* kGetWindow( QWORD qwWindowID );
 WINDOW* kGetWindowWithWindowLock( QWORD qwWindowID );
 BOOL kShowWindow( QWORD qwWindowID, BOOL bShow );
-BOOL kRedrawWindowByArea( const RECT* pstArea );
-static void kCopyWindowBufferToFrameBuffer( const WINDOW* pstWindow, const RECT* pstCopyArea );
+BOOL kRedrawWindowByArea( const RECT* pstArea, QWORD qwDrawWindowID );
+static void kCopyWindowBufferToFrameBuffer( const WINDOW* pstWindow, DRAWBITMAP* pstDrawBitmap );
 QWORD kFindWindowByPoint( int iX, int iY );
 QWORD kFindWindowByTitle( const char* pcTitle );
 BOOL kIsWindowExist( QWORD qwWindowID );
@@ -288,5 +303,11 @@ BOOL kDrawText( QWORD qwWindowID, int iX, int iY, COLOR stTextColor, COLOR stBac
 static void kDrawCursor( int iX, int iY );
 void kMoveCursor( int iX, int iY );
 void kGetCursorPosition( int* piX, int* piY );
+
+//  화면 업데이트에 사용하는 화면 업데이트 비트맵 관련
+BOOL kCreateDrawBitmap( const RECT* pstArea, DRAWBITMAP* pstDrawBitmap );
+static BOOL kFillDrawBitmap( DRAWBITMAP* pstDrawBitmap, RECT* pstArea, BOOL bFill );
+inline BOOL kGetStartPositionInDrawBitmap( const DRAWBITMAP* pstDrawBitmap, int iX, int iY, int* piByteOffset, int* piBitOffset );
+inline BOOL kIsDrawBitmapAllOff( const DRAWBITMAP* pstDrawBitmap );
 
 #endif /*__WINDOW_H__*/

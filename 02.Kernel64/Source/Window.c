@@ -3,6 +3,7 @@
 #include "Task.h"
 #include "Font.h"
 #include "DynamicMemory.h"
+#include "Utility.h"
 
 // GUI 시스템 관련 자료구조
 static WINDOWPOOLMANAGER gs_stWindowPoolManager;
@@ -169,6 +170,18 @@ void kInitializeGUISystem( void )
     // 이벤트 큐를 초기화
     kInitializeQueue( &( gs_stWindowManager.stEventQueue ), pstEventBuffer, EVENTQUEUE_WINDOWMANAGERMAXCOUNT, sizeof( EVENT ) );
 
+    // 화면을 업데이트할 때 사용할 비트맵 버퍼 생성
+    // 비트맵은 화면 전체 크기로 생성해서 공용으로 사용하도록 함
+    gs_stWindowManager.pbDrawBitmap = kAllocateMemory( ( pstModeInfo->wXResolution * pstModeInfo->wYResolution + 7 ) / 8 );
+    if( gs_stWindowManager.pbDrawBitmap == NULL )
+    {
+        kPrintf( "Draw Bitmap Allocate Fail\n" );
+        while( 1 )
+        {
+            ;
+        }
+    }
+
     // 마우스 버튼의 상태와 윈도우 이동 여부를 초기 
     gs_stWindowManager.bPreviousButtonStatus = 0;
     gs_stWindowManager.bWindowMoveMode = FALSE;
@@ -281,8 +294,8 @@ QWORD kCreateWindow( int iX, int iY, int iWidth, int iHeight, DWORD dwFlags, con
     // 현재 최상위에 있는 윈도우를 반환
     qwActiveWindowID = kGetTopWindowID();
 
-    // 윈도우 리스트의 가장 마지막에 추가하여 최상위 윈도우로 설정
-    kAddListToTail( &gs_stWindowManager.stWindowList, pstWindow );
+    // 윈도우 리스트의 가장 앞에 추가하여 최상위 윈도우로 설정
+    kAddListToHeader( &gs_stWindowManager.stWindowList, pstWindow );
 
     // 동기화 처리
     kUnlock( &( gs_stWindowManager.stLock ) );
@@ -520,12 +533,20 @@ BOOL kShowWindow( QWORD qwWindowID, BOOL bShow )
 
 //  특정 영역을 포함하는 윈도우는 모두 그림
 //      윈도우 매니저가 호출하는 함수, 유저는 kUpdateScreen()류 함수를 사용
-BOOL kRedrawWindowByArea( const RECT* pstArea )
+BOOL kRedrawWindowByArea( const RECT* pstArea, QWORD qwDrawWindowID )
 {
     WINDOW* pstWindow;
     WINDOW* pstTargetWindow = NULL;
     RECT stOverlappedArea;
     RECT stCursorArea;
+    DRAWBITMAP stDrawBitmap;
+    RECT stTempOverlappedArea;
+    RECT vstLargestOverlappedArea[ WINDOW_OVERLAPPEDAREALOGMAXCOUNT ];
+    int viLargestOverlappedAreaSize[ WINDOW_OVERLAPPEDAREALOGMAXCOUNT ];
+    int iTempOverlappedAreaSize;
+    int iMinAreaSize;
+    int iMinAreaIndex;
+    int i;
 
     // 화면 영역과 겹치는 영역이 없으면 그릴 필요가 없음
     if( kGetOverlappedRectangle( &( gs_stWindowManager.stScreenArea ), pstArea, &stOverlappedArea ) == FALSE )
@@ -537,28 +558,93 @@ BOOL kRedrawWindowByArea( const RECT* pstArea )
     // Z 순서의 최하위, 즉 윈도우 리스트의 첫 번째부터 마지막까지 루프를 돌면서
     // 업데이트할 영역과 겹치는 윈도우를 찾아 비디오 메모리로 전송
     //------------------------------------------------------------------------------
+    // 화면에 업데이트할 영역을 기록할 공간을 초기화
+    kMemSet( viLargestOverlappedAreaSize, 0, sizeof( viLargestOverlappedAreaSize ) );
+    kMemSet( vstLargestOverlappedArea, 0, sizeof( vstLargestOverlappedArea ) );
+    
     // 동기화 처리
     kLock( &( gs_stWindowManager.stLock ) );
 
-    // 현재 윈도우 리스트는 Z 순서의 역방향, 즉 처음에 있는 윈도우가 Z 순서의 최하위
-    // 윈도우가 되고 마지막 윈도우가 최상위 윈도우가 되도록 정렬되어 있음
-    // 따라서 윈도우 리스트를 처음부터 따라가면서 그릴 영역을 포함하는 윈도우를 찾고
-    // 그 윈도우부터 최상위 윈도우까지 화면에 전송하면 됨
+    // 화면에 업데이트할 영역을 저장하는 비트맵 생성
+    kCreateDrawBitmap( &stOverlappedArea, &stDrawBitmap );
+
+    // 현재 윈도우 리스트는 Z 순서에 따라서 정렬되어 있으므로, 윈도우 리스트를 처음부터
+    // 따라가면 업데이트할 영역을 포함하는 윈도우를 찾아 아래로 내려가며 화면에 전송
     pstWindow = kGetHeaderFromList( &( gs_stWindowManager.stWindowList ) );
     while( pstWindow != NULL )
     {
         // 윈도우를 화면에 나타내는 옵션이 설정되어 있으며,
         // 업데이트할 부분과 윈도우가 차지하는 영역이 겹치면 겹치는 만큼을 화면에 전송
-        if( ( pstWindow->dwFlags & WINDOW_FLAGS_SHOW ) && ( kIsRectangleOverlapped( &( pstWindow->stArea ), &stOverlappedArea ) == TRUE ) )
+        if( ( pstWindow->dwFlags & WINDOW_FLAGS_SHOW ) && ( kGetOverlappedRectangle( &( pstWindow->stArea ), &stOverlappedArea, &stTempOverlappedArea ) == TRUE ) )
         {
+            // 윈도우와 겹치는 영역의 넓이를 계산
+            iTempOverlappedAreaSize = kGetRectangleWidth( &stTempOverlappedArea ) * kGetRectangleHeight( &stTempOverlappedArea );
+
+            // 이전에 기록한 윈도우 업데이트 영역을 검색하여 이전 영역에 포함되는지 확인
+            for( i = 0 ; i < WINDOW_OVERLAPPEDAREALOGMAXCOUNT ; i++ )
+            {
+                // 겹치는 영역을 이전에 저장한 영역과 비교하여 화면을 업데이트할지 결정
+                // 이전에 업데이트한 영역 중에서 큰 영역에 포함되면 업데이트하지 않음
+                if( ( iTempOverlappedAreaSize <= viLargestOverlappedAreaSize[ i ] ) && ( kIsInRectangle( &( vstLargestOverlappedArea[ i ] ), stTempOverlappedArea.iX1, stTempOverlappedArea.iY1 ) == TRUE ) && ( kIsInRectangle( &( vstLargestOverlappedArea[ i ] ), stTempOverlappedArea.iX2, stTempOverlappedArea.iY2 ) == TRUE ) )
+                {
+                    break;
+                }
+            }
+
+            // 일치하는 업데이트 영역을 찾았다면 이전에 업데이트되었다는 뜻이므로
+            // 다음 윈도우로 이동
+            if( i < WINDOW_OVERLAPPEDAREALOGMAXCOUNT )
+            {
+                // 다음 윈도우를 찾음
+                pstWindow = kGetNextFromList( &( gs_stWindowManager.stWindowList ), pstWindow );
+                continue;
+            }
+
+            // 현재 영역이 이전에 업데이트했던 가장 큰 영역과 완전히 포함되지 않는다면
+            // 넓이를 비교해서 이전에 업데이트한 영역 중 가장 작은 영역을 검색
+            iMinAreaSize = 0xFFFFFF;
+            iMinAreaIndex = 0;
+            for( i = 0 ; i < WINDOW_OVERLAPPEDAREALOGMAXCOUNT ; i++ )
+            {
+                if( viLargestOverlappedAreaSize[ i ] < iMinAreaSize )
+                {
+                    iMinAreaSize = viLargestOverlappedAreaSize[ i ];
+                    iMinAreaIndex = i;
+                }
+            }
+
+            // 저장된 영역 중에 최소 크기보다 현재 겹치는 영역의 넓이가 크면 해당 위치를
+            // 교체하여 영역 크기 순으로 10개를 유지
+            if( iMinAreaSize < iTempOverlappedAreaSize )
+            {
+                kMemCpy( &( vstLargestOverlappedArea[ iMinAreaIndex ] ), &stTempOverlappedArea, sizeof( RECT ) );
+                viLargestOverlappedAreaSize[ iMinAreaIndex ] = iTempOverlappedAreaSize;
+            }
+
             // 동기화 처리
             kLock( &( pstWindow->stLock ) );
 
-            // 실제로 비디오 메모리로 전송하는 함수
-            kCopyWindowBufferToFrameBuffer( pstWindow, &stOverlappedArea );
+            // 윈도우 ID가 유효하다면 그 전까지 윈도우는 화면에 그리지 않고
+            // 업데이트 비트맵만 업데이트한 것으로 변경
+            if( ( qwDrawWindowID != WINDOW_INVALIDID ) && ( qwDrawWindowID != pstWindow->stLink.qwID ) )
+            {
+                // 비트맵만 업데이트
+                kFillDrawBitmap( &stDrawBitmap, &( pstWindow->stArea ), FALSE );
+            }
+            else
+            {
+                // 윈도우 화면 버퍼를 비디오 메모리로 전송
+                kCopyWindowBufferToFrameBuffer( pstWindow, &stDrawBitmap );
+            }
 
             // 동기화 처리
             kUnlock( &( pstWindow->stLock ) );
+        }
+
+        // 모든 영역이 업데이트되면 더 이상 그릴 필요 없음
+        if( kIsDrawBitmapAllOff( &stDrawBitmap ) == TRUE )
+        {
+            break;
         }
 
         // 다음 윈도우를 찾음
@@ -582,7 +668,7 @@ BOOL kRedrawWindowByArea( const RECT* pstArea )
 }
 
 //  윈도우 화면 버퍼의 일부 또는 전체를 프레임 버퍼로 복사
-static void kCopyWindowBufferToFrameBuffer( const WINDOW* pstWindow, const RECT* pstCopyArea )
+static void kCopyWindowBufferToFrameBuffer( const WINDOW* pstWindow, DRAWBITMAP* pstDrawBitmap )
 {
     RECT stTempArea;
     RECT stOverlappedArea;
@@ -593,9 +679,16 @@ static void kCopyWindowBufferToFrameBuffer( const WINDOW* pstWindow, const RECT*
     int i;
     COLOR* pstCurrentVideoMemoryAddress;
     COLOR* pstCurrentWindowBufferAddress;
+    BYTE bTempBitmap;
+    int iByteOffset;
+    int iBitOffset;
+    int iOffsetX;
+    int iOffsetY;
+    int iLastBitOffset;
+    int iBulkCount;
 
     // 전송해야 하는 영역과 화면 영역이 겹치는 부분을 임시로 계산
-    if( kGetOverlappedRectangle( &( gs_stWindowManager.stScreenArea ), pstCopyArea, &stTempArea ) == FALSE )
+    if( kGetOverlappedRectangle( &( gs_stWindowManager.stScreenArea ), &( pstDrawBitmap->stArea ), &stTempArea ) == FALSE )
     {
         return ;
     }
@@ -613,22 +706,115 @@ static void kCopyWindowBufferToFrameBuffer( const WINDOW* pstWindow, const RECT*
     iOverlappedWidth = kGetRectangleWidth( &stOverlappedArea );
     iOverlappedHeight = kGetRectangleHeight( &stOverlappedArea );
 
-    // 전송을 시작할 비디오 메모리 어드레스와 윈도우 화면 버퍼의 어드레스를 계산
-    pstCurrentVideoMemoryAddress = gs_stWindowManager.pstVideoMemory + stOverlappedArea.iY1 * iScreenWidth + stOverlappedArea.iX1;
-
-    // 윈도우 화면 버퍼는 화면 전체가 아닌 윈도우를 기준으로 한 좌표이므로,
-    // 겹치는 영역을 윈도우 내부 좌표를 기준으로 변환
-    pstCurrentWindowBufferAddress = pstWindow->pstWindowBuffer + ( stOverlappedArea.iY1 - pstWindow->stArea.iY1 ) * iWindowWidth + ( stOverlappedArea.iX1 - pstWindow->stArea.iX1 );
-
-    // 루프를 돌면서 윈도우 화면 버퍼의 내용을 비디오 메모리로 복사
-    for( i = 0 ; i < iOverlappedHeight ; i++ )
+    //------------------------------------------------------------------------------
+    // 겹치는 영역의 높이만큼 출력하는 루프를 반복
+    //------------------------------------------------------------------------------
+    for( iOffsetY = 0 ; iOffsetY < iOverlappedHeight ; iOffsetY++ )
     {
-        // 라인별로 한 번에 전송
-        kMemCpy( pstCurrentVideoMemoryAddress, pstCurrentWindowBufferAddress, iOverlappedWidth * sizeof ( COLOR ) );
+        // 겹치는 영역이 화면 업데이트 비트맵에서 존재하는 위치를 계산
+        if( kGetStartPositionInDrawBitmap( pstDrawBitmap, stOverlappedArea.iX1, stOverlappedArea.iY1 + iOffsetY, &iByteOffset, &iBitOffset ) == FALSE )
+        {
+            break;
+        }
 
-        // 다음 라인으로 메모리 어드레스 이동
-        pstCurrentVideoMemoryAddress += iScreenWidth;
-        pstCurrentWindowBufferAddress += iWindowWidth;
+        // 전송을 시작할 비디오 메모리 어드레스와 윈도우 화면 버퍼의 어드레스를 계산
+        pstCurrentVideoMemoryAddress = gs_stWindowManager.pstVideoMemory + ( stOverlappedArea.iY1 + iOffsetY ) * iScreenWidth + stOverlappedArea.iX1;
+
+        // 윈도우 화면 버퍼는 화면 전체가 아닌 윈도우를 기준으로 한 좌표이므로,
+        // 겹치는 영역을 윈도우 내부 좌표 기준으로 변환
+        pstCurrentWindowBufferAddress = pstWindow->pstWindowBuffer + ( stOverlappedArea.iY1 - pstWindow->stArea.iY1 + iOffsetY ) * iWindowWidth + ( stOverlappedArea.iX1 - pstWindow->stArea.iX1 );
+
+        //------------------------------------------------------------------------------
+        // 겹친 영역의 너비만큼 출력하는 루프를 반복
+        //------------------------------------------------------------------------------
+        for( iOffsetX = 0 ; iOffsetX < iOverlappedWidth ; )
+        {
+            // 8개의 픽셀을 한 번에 업데이트 할 수 있으면 8픽셀 단위로 처리할 수 있는
+            // 크기를 계산하여 한 번에 처리
+            if( ( pstDrawBitmap->pbBitmap[ iByteOffset ] == 0xFF ) && ( iBitOffset == 0x00 ) && ( ( iOverlappedWidth - iOffsetX ) >= 8 ) )
+            {
+                // 현재 위치에서 8픽셀 단위로 처리할 수 있는 최대 크기를 계산
+                for( iBulkCount = 0 ; ( iBulkCount < ( ( iOverlappedWidth - iOffsetX ) >> 3 ) ) ; iBulkCount++ )
+                {
+                    if( pstDrawBitmap->pbBitmap[ iByteOffset + iBulkCount ] != 0xFF )
+                    {
+                        break;
+                    }
+                }
+
+                // 8픽셀 단위로 한번에 처리
+                kMemCpy( pstCurrentVideoMemoryAddress, pstCurrentWindowBufferAddress, ( sizeof( COLOR ) * iBulkCount ) << 3 );
+
+                // 메모리 어드레스와 비트맵 정보를 8픽셀 단위로 업데이트
+                pstCurrentVideoMemoryAddress += iBulkCount << 3;
+                pstCurrentWindowBufferAddress += iBulkCount << 3;
+                kMemSet( pstDrawBitmap->pbBitmap + iByteOffset, 0x00, iBulkCount );
+
+                // 전체 개수에서 8픽셀 단위로 전송한 수만큼 값을 더함
+                iOffsetX += iBulkCount << 3;
+
+                // 비트맵의 오프셋을 변경
+                iByteOffset += iBulkCount;
+                iBitOffset = 0;
+            }
+            // 현재 영역이 이미 업데이트되어 8개의 픽셀을 한 번에 제외 할 수 있으면
+            // 8픽셀 단위로 처리할 수 있는 크기를 계산하여 한 번에 처리
+            else if( ( pstDrawBitmap->pbBitmap[ iByteOffset ] == 0x00 ) && ( iBitOffset == 0x00 ) && ( ( iOverlappedWidth - iOffsetX ) >= 8 ) )
+            {
+                // 현재 위치에서 8픽셀 단위로 처리 할 수 있는 최대 크기를 계산
+                for( iBulkCount = 0 ; ( iBulkCount < ( ( iOverlappedWidth - iOffsetX ) >> 3 ) ) ; iBulkCount++ )
+                {
+                    if( pstDrawBitmap->pbBitmap[ iByteOffset + iBulkCount ] != 0x00 )
+                    {
+                        break;
+                    }
+                }
+
+                // 메모리 어드레스를 변경된 것으로 업데이트
+                pstCurrentVideoMemoryAddress += iBulkCount << 3;
+                pstCurrentWindowBufferAddress += iBulkCount << 3;
+
+                // 전체 개수에서 8픽셀 단위로 제외한 수만큼 값을 더함
+                iOffsetX += iBulkCount << 3;
+
+                // 비트맵의 오프셋을 변경
+                iByteOffset += iBulkCount;
+                iBitOffset = 0;
+            }
+            else
+            {
+                // 현재 업데이트할 위치의 비트맵
+                bTempBitmap = pstDrawBitmap->pbBitmap[ iByteOffset ];
+
+                // 현재 비트맵에서 출력해야 할 마지막 픽셀의 비트 오프셋을 구함
+                iLastBitOffset = MIN( 8, iOverlappedWidth - iOffsetX + iBitOffset );
+
+                // 한 점씩 이동시킴
+                for( i = iBitOffset ; i < iLastBitOffset ; i++ )
+                {
+                    // 비트맵이 1로 설정되어 있으면 화면에 출력하고 해당 비트를 0으로 변경
+                    if( bTempBitmap & ( 0x01 << i ) )
+                    {
+                        *pstCurrentVideoMemoryAddress = *pstCurrentWindowBufferAddress;
+
+                        // 비트맵 정보를 변경된 것으로 업데이트
+                        bTempBitmap &= ~( 0x01 << i );
+                    }
+
+                    // 메모리 어드레스를 변경된 것으로 업데이트
+                    pstCurrentVideoMemoryAddress++;
+                    pstCurrentWindowBufferAddress++;
+                }
+
+                // 전체 개수에서 1픽셀 단위로 전송한 수만큼 값을 더함
+                iOffsetX += ( iLastBitOffset - iBitOffset );
+
+                // 비트맵 정보를 변경된 것으로 업데이트
+                pstDrawBitmap->pbBitmap[ iByteOffset ] = bTempBitmap;
+                iByteOffset++;
+                iBitOffset = 0;
+            }
+        }
     }
 }
 
@@ -644,18 +830,19 @@ QWORD kFindWindowByPoint( int iX, int iY )
     // 동기화 처리
     kLock( &( gs_stWindowManager.stLock ) );
 
-    // 배경 윈도우 다음부터 검색 시작
+    // 최상위 윈도우부터 검색 시작
     pstWindow = kGetHeaderFromList( &( gs_stWindowManager.stWindowList ) );
     do
     {
-        // 다음 윈도우를 반환
-        pstWindow = kGetNextFromList( &( gs_stWindowManager.stWindowList ), pstWindow );
-
-        // 윈도우가 화면에 보이고 윈도우가 X, Y 좌표를 포함한다면 윈도우 ID 업데이트
-        if( ( pstWindow != NULL ) && ( pstWindow->dwFlags & WINDOW_FLAGS_SHOW ) && ( kIsInRectangle( &( pstWindow->stArea ), iX, iY ) == TRUE ) )
+        // 윈도우가 화면에 보이고 윈도우가 X, Y좌표를 포함 한다면 윈도우 ID 업데이트
+        if( ( pstWindow->dwFlags & WINDOW_FLAGS_SHOW ) && ( kIsInRectangle( &( pstWindow->stArea ), iX, iY ) == TRUE ) )
         {
             qwWindowID = pstWindow->stLink.qwID;
+            break;
         }
+
+        // 다음 윈도우를 반환
+        pstWindow = kGetNextFromList( &( gs_stWindowManager.stWindowList ), pstWindow );
     } while ( pstWindow != NULL );
 
     // 동기화 처리
@@ -717,8 +904,8 @@ QWORD kGetTopWindowID( void )
     // 동기화 처리
     kLock( &( gs_stWindowManager.stLock ) );
 
-    // 윈도우 리스트의 가장 마지막에 있는 윈도우를 반환
-    pstActiveWindow = ( WINDOW* ) kGetTailFromList( &( gs_stWindowManager.stWindowList ) );
+    // 윈도우 리스트의 가장 앞에 있는 윈도우를 반환
+    pstActiveWindow = ( WINDOW* ) kGetHeaderFromList( &( gs_stWindowManager.stWindowList ) );
     if( pstActiveWindow != NULL )
     {
         qwActiveWindowID = pstActiveWindow->stLink.qwID;
@@ -755,11 +942,11 @@ BOOL kMoveWindowToTop( QWORD qwWindowID )
     // 동기화 처리
     kLock( &( gs_stWindowManager.stLock ) );
 
-    // 윈도우 리스트에서 제거하여 윈도우 리스트의 마지막으로 이동
+    // 윈도우 리스트에서 제거하여 윈도우 리스트의 앞으로 이동
     pstWindow = kRemoveList( &( gs_stWindowManager.stWindowList ), qwWindowID );
     if( pstWindow != NULL )
     {
-        kAddListToTail( &( gs_stWindowManager.stWindowList ), pstWindow );
+        kAddListToHeader( &( gs_stWindowManager.stWindowList ), pstWindow );
 
         // 윈도우 영역을 윈도우 내부 좌표로 변환하여 플래그와 함께 저장
         // 아래에서 윈도우 화면을 업데이트할 때 사용
@@ -1540,7 +1727,7 @@ static void kDrawCursor( int iX, int iY )
     pbCurrentPos = gs_vwMouseBuffer; 
 
     // 커서의 너비와 높이만큼 루프를 돌면서 픽셀을 화면에 출력
-    for( j = 0 ; j < MOUSE_CURSOR_HEIGHT ; j ++ )
+    for( j = 0 ; j < MOUSE_CURSOR_HEIGHT ; j++ )
     {
         for( i = 0 ; i < MOUSE_CURSOR_WIDTH ; i++ )
         {
@@ -1614,7 +1801,7 @@ void kMoveCursor( int iX, int iY )
     kUnlock( &( gs_stWindowManager.stLock ) );
 
     // 마우스가 이전에 있던 영역을 다시 그림
-    kRedrawWindowByArea( &stPreviousArea );
+    kRedrawWindowByArea( &stPreviousArea, WINDOW_INVALIDID );
 
     // 새로운 위치에 마우스 커서를 출력
     kDrawCursor( iX, iY );
@@ -1747,6 +1934,206 @@ BOOL kDrawText( QWORD qwWindowID, int iX, int iY, COLOR stTextColor, COLOR stBac
 
     // 동기화 처리
     kUnlock( &pstWindow->stLock );
+
+    return TRUE;
+}
+
+//==============================================================================
+//  화면 업데이트에 사용하는 화면 업데이트 비트맵 관련
+//==============================================================================
+//  화면 업데이트에 사용할 비트맵을 생성
+//      좌표는 화면 좌표를 사용
+BOOL kCreateDrawBitmap( const RECT* pstArea, DRAWBITMAP* pstDrawBitmap )
+{
+    // 화면 영역과 겹치는 부분이 없으면 비트맵을 생성할 필요가 없음
+    if( kGetOverlappedRectangle( &( gs_stWindowManager.stScreenArea ), pstArea, &( pstDrawBitmap->stArea ) ) == FALSE )
+    {
+        return FALSE;
+    }
+
+    // 윈도우 매니저에 있는 화면 업데이트 비트맵 버퍼를 설정
+    pstDrawBitmap->pbBitmap = gs_stWindowManager.pbDrawBitmap;
+
+    return kFillDrawBitmap( pstDrawBitmap, &( pstDrawBitmap->stArea ), TRUE );
+}
+
+//  화면에 업데이트할 비트맵 영역과 현재 영역이 겹치는 부분에 값을 0 또는 1로 채움
+static BOOL kFillDrawBitmap( DRAWBITMAP* pstDrawBitmap, RECT* pstArea, BOOL bFill )
+{
+    RECT stOverlappedArea;
+    int iByteOffset;
+    int iBitOffset;
+    int iAreaSize;
+    int iOverlappedWidth;
+    int iOverlappedHeight;
+    BYTE bTempBitmap;
+    int i;
+    int iOffsetX;
+    int iOffsetY;
+    int iBulkCount;
+    int iLastBitOffset;
+
+    // 업데이트할 영역과 겹치는 부분이 없으면 비트맵 버퍼에 값을 채울 필요 없음
+    if( kGetOverlappedRectangle( &( pstDrawBitmap->stArea ), pstArea, &stOverlappedArea ) == FALSE )
+    {
+        return FALSE;
+    }
+
+    // 겹치는 영역의 너비와 높이를 계산
+    iOverlappedWidth = kGetRectangleWidth( &stOverlappedArea );
+    iOverlappedHeight = kGetRectangleHeight( &stOverlappedArea );
+
+    // 겹치는 영역의 높이만큼 출력하는 루프를 반복
+    for( iOffsetY = 0 ; iOffsetY < iOverlappedHeight ; iOffsetY++ )
+    {
+        // 비트맵 버퍼 내에 라인의 시작 위치를 반환
+        if( kGetStartPositionInDrawBitmap( pstDrawBitmap, stOverlappedArea.iX1, stOverlappedArea.iY1 + iOffsetY, &iByteOffset, &iBitOffset ) == FALSE )
+        {
+            break;
+        }
+        
+        //------------------------------------------------------------------------------
+        // 겹친 영역의 너비만큼 출력하는 루프를 반복
+        //------------------------------------------------------------------------------
+        for( iOffsetX = 0 ; iOffsetX < iOverlappedWidth ; )
+        {
+            // 8픽셀 단위로 처리할 수 있는 크기를 계산하여 한 번에 처리
+            if( ( iBitOffset == 0x00 ) && ( ( iOverlappedWidth - iOffsetX ) >= 8 ) )
+            {
+                // 현재 위치에서 8픽셀 단위로 처리할 수 있는 최대 크기를 계산
+                iBulkCount = ( iOverlappedWidth - iOffsetX ) >> 3;
+
+                // 8픽셀 단위로 한번에 처리
+                if( bFill == TRUE )
+                {
+                    kMemSet( pstDrawBitmap->pbBitmap + iByteOffset, 0xFF, iBulkCount );
+                }
+                else
+                {
+                    kMemSet( pstDrawBitmap->pbBitmap + iByteOffset, 0x00, iBulkCount );
+                }
+
+                // 전체 개수에서 개별적으로 설정한 비트맵의 수만큼 값을 변경
+                iOffsetX += iBulkCount << 3;
+
+                // 비트맵의 오프셋을 변경
+                iByteOffset += iBulkCount;
+                iBitOffset = 0;
+            }
+            else
+            {
+                // 현재 비트맵에서 출력해야 할 마지막 픽셀의 비트 오프셋을 계산
+                iLastBitOffset = MIN( 8, iOverlappedWidth - iOffsetX + iBitOffset );
+
+                // 비트맵 생성
+                bTempBitmap = 0;
+                for( i = iBitOffset ; i < iLastBitOffset ; i++ )
+                {
+                    bTempBitmap |= ( 0x01 << i );
+                }
+                
+                // 전체 개수에서 8픽셀씩 설정한 비트맵의 수만큼 값을 변경
+                iOffsetX += ( iLastBitOffset - iBitOffset );
+
+                // 비트맵 정보를 변경된 것으로 업데이트
+                if( bFill == TRUE )
+                {
+                    pstDrawBitmap->pbBitmap[ iByteOffset ] |= bTempBitmap;
+                }
+                else
+                {
+                    pstDrawBitmap->pbBitmap[ iByteOffset ] &= ~( bTempBitmap );
+                }
+
+                iByteOffset++;
+                iBitOffset = 0;
+            }
+        }
+    }
+
+    return TRUE;
+}
+
+//  화면 좌표가 화면 업데이트 비트맵 내부에서 시작하는 바이트 오프셋과 비트 오프셋을 반환
+//      좌표는 화면 좌표를 사용
+BOOL kGetStartPositionInDrawBitmap( const DRAWBITMAP* pstDrawBitmap, int iX, int iY, int* piByteOffset, int* piBitOffset )
+{
+    int iWidth;
+    int iOffsetX;
+    int iOffsetY;
+
+    // 비트맵 영역 내부에 좌표가 포함되지 않으면 찾을 필요 없음
+    if( kIsInRectangle( &( pstDrawBitmap->stArea ), iX, iY ) == FALSE )
+    {
+        return FALSE;
+    }
+
+    // 업데이트 영역 내부의 오프셋을 계산
+    iOffsetX = iX - pstDrawBitmap->stArea.iX1;
+    iOffsetY = iY - pstDrawBitmap->stArea.iY1;
+    // 업데이트할 영역의 너비를 계산
+    iWidth = kGetRectangleWidth( &( pstDrawBitmap->stArea ) );
+
+    // 바이트 오프셋은 X, Y가 그릴 영역에서 위치한 곳을 8(바이트당 8픽셀)로 나누어 계산
+    *piByteOffset = ( iOffsetY * iWidth + iOffsetX ) >> 3;
+    // 위에서 계산한 바이트 내에 비트 오프셋은 8로 나눈 나머지로 계산
+    *piBitOffset = ( iOffsetY * iWidth + iOffsetX ) & 0x7;
+
+    return TRUE;
+}
+
+//  화면에 그릴 비트맵이 모두 0으로 설정되어 더이상 업데이트할 것이 없는지를 반환
+BOOL kIsDrawBitmapAllOff( const DRAWBITMAP* pstDrawBitmap )
+{
+    int iByteCount;
+    int iLastBitIndex;
+    int iWidth;
+    int iHeight;
+    int i;
+    BYTE* pbTempPosition;
+    int iSize;
+
+    // 업데이트할 영역의 너비와 높이를 계산
+    iWidth = kGetRectangleWidth( &( pstDrawBitmap->stArea ) );
+    iHeight = kGetRectangleHeight( &( pstDrawBitmap->stArea ) );
+
+    // 비트맵의 바이트 수를 계산
+    iSize = iWidth * iHeight;
+    iByteCount = iSize >> 3;
+
+    // 8바이트씩 한 번에 비교
+    pbTempPosition = pstDrawBitmap->pbBitmap;
+    for( i = 0 ; i < ( iByteCount >> 3 ) ; i++ )
+    {
+        if( *( QWORD* ) ( pbTempPosition ) != 0 )
+        {
+            return FALSE;
+        }
+
+        pbTempPosition += 8;
+    }
+
+    // 8바이트 단위로 떨어지지 않는 나머지를 비교
+    for( i = 0 ; i < ( iByteCount & 0x7 ) ; i++ )
+    {
+        if( *pbTempPosition != 0 )
+        {
+            return FALSE;
+        }
+
+        pbTempPosition++;
+    }
+
+    // 전체 크기가 8로 나누어 떨어지지 않는다면 한 바이트가 가득 차지 않은 마지막
+    // 바이트가 있으므로 이를 검사
+    iLastBitIndex = iSize & 0x7;
+    for( i = 0 ; i < iLastBitIndex ; i++ )
+    {
+        if( *pbTempPosition & ( 0x01 << i ) )
+        {
+            return FALSE;
+        }
+    }
 
     return TRUE;
 }
