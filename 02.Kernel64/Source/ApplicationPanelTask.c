@@ -8,6 +8,7 @@ APPLICATIONENTRY gs_vstApplicationTable[] =
 {
     { "Base GUI Task", kBaseGUITask },
     { "Hello World GUI Task", kHelloWorldGUITask },
+    { "System Monitor Task", kSystemMonitorTask },
 };
 
 // 애플리케이션 패널에서 사용하는 자료구조
