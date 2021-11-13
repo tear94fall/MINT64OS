@@ -1,5 +1,10 @@
 2DGraphics.o: ../Source/2DGraphics.c ../Source/2DGraphics.h \
  ../Source/Types.h ../Source/VBE.h ../Source/Font.h ../Source/Utility.h
+ApplicationPanelTask.o: ../Source/ApplicationPanelTask.c \
+ ../Source/ApplicationPanelTask.h ../Source/Types.h ../Source/Window.h \
+ ../Source/Synchronization.h ../Source/2DGraphics.h ../Source/List.h \
+ ../Source/Queue.h ../Source/Keyboard.h ../Source/Font.h ../Source/RTC.h \
+ ../Source/Task.h ../Source/GUITask.h
 CacheManager.o: ../Source/CacheManager.c ../Source/CacheManager.h \
  ../Source/Types.h ../Source/FileSystem.h ../Source/Synchronization.h \
  ../Source/HardDisk.h ../Source/DynamicMemory.h
@@ -91,4 +96,5 @@ WindowManagerTask.o: ../Source/WindowManagerTask.c ../Source/Types.h \
  ../Source/Window.h ../Source/Synchronization.h ../Source/2DGraphics.h \
  ../Source/List.h ../Source/Queue.h ../Source/Keyboard.h \
  ../Source/WindowManagerTask.h ../Source/VBE.h ../Source/Mouse.h \
- ../Source/Task.h ../Source/GUITask.h ../Source/Font.h
+ ../Source/Task.h ../Source/GUITask.h ../Source/Font.h \
+ ../Source/ApplicationPanelTask.h
