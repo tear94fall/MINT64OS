@@ -2,6 +2,9 @@
 #define __CONSOLE_H__
 
 #include "Types.h"
+#include "Synchronization.h"
+#include "Queue.h"
+#include "Keyboard.h"
 
 // 매크로
 // 비디오 메모리의 속성 값 설정
@@ -44,6 +47,9 @@
 #define VGA_INDEX_UPPERCURSOR       0x0E
 #define VGA_INDEX_LOWERCURSOR       0x0F
 
+// 그래픽 모드에서 사용하는 키 큐에 저장할 수 있는 최대 개수
+#define CONSOLE_GUIKEYQUEUE_MAXCOUNT        100
+
 // 구조체
 // 1바이트로 정렬
 #pragma pack( push, 1 )
@@ -53,6 +59,16 @@ typedef struct kConsoleManagerStruct
 {
     // 문자와 커서를 출력할 위치
     int iCurrentPrintOffset;
+
+    // 출력할 화면 버퍼의 어드레스
+    CHARACTER* pstScreenBuffer;
+
+    // 그래픽 모드에서 사용할 키 큐와 뮤텍스
+    QUEUE stKeyQueueForGUI;
+    MUTEX stLock;
+
+    // 쉘 태스크를 종료할지 여부
+    volatile BOOL bExit;
 } CONSOLEMANAGER;
 
 #pragma pack( pop )
@@ -66,5 +82,9 @@ int kConsolePrintString( const char* pcBuffer );
 void kClearScreen( void );
 BYTE kGetCh( void );
 void kPrintStringXY( int iX, int iY, const char* pcString );
+CONSOLEMANAGER* kGetConsoleManager( void );
+BOOL kGetKeyFromGUIKeyQueue( KEYDATA* pstData );
+BOOL kPutKeyToGUIKeyQueue( KEYDATA* pstData );
+void kSetConsoleShellExitFlag( BOOL bFlag );
 
 #endif /*__CONSOLE_H__*/

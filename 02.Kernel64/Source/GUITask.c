@@ -2,6 +2,9 @@
 #include "Window.h"
 #include "MultiProcessor.h"
 #include "Font.h"
+#include "Console.h"
+#include "Task.h"
+#include "ConsoleShell.h"
 
 //------------------------------------------------------------------------------------------
 //  기본 GUI 태스크
@@ -606,4 +609,196 @@ static void kDrawMemoryInformation( QWORD qwWindowID, int iY, int iWindowWidth )
     // 메모리 정보가 표시된 영역만 화면에 다시 업데이트
     kSetRectangleData( 0, iY, iWindowWidth, iY + SYSTEMMONITOR_MEMORY_HEIGHT, &stArea );
     kUpdateScreenByWindowArea( qwWindowID, &stArea );
+}
+
+//------------------------------------------------------------------------------------------
+//  GUI 버전의 콘솔 쉘 태스크
+//------------------------------------------------------------------------------------------
+// 이전 화면 버퍼에 값을 보관하는 영역
+static CHARACTER gs_vstPreviousScreenBuffer[ CONSOLE_WIDTH * CONSOLE_HEIGHT ];
+
+//  GUI 버전의 콘솔 쉘 태스크
+void kGUIConsoleShellTask( void )
+{
+    static QWORD s_qwWindowID = WINDOW_INVALIDID;
+    int iWindowWidth, iWindowHeight;
+    EVENT stReceivedEvent;
+    KEYEVENT* pstKeyEvent;
+    RECT stScreenArea;
+    KEYDATA stKeyData;
+    TCB* pstConsoleShellTask;
+    QWORD qwConsoleShellTaskID;
+
+    //------------------------------------------------------------------------------------------
+    // 그래픽 모드 판단
+    //------------------------------------------------------------------------------------------
+    // MINT64 OS가 그래픽 모드로 시작헀는지 확인
+    if( kIsGraphicMode() == FALSE )
+    {
+        // MINT64 OS가 그래픽 모드로 시작하지 않았다면 실패
+        kPrintf( "This task can run only GUI mode~!!!\n" );
+        return ;
+    }
+
+    // GUI 콘솔 쉘 윈도우가 존재하면 생성된 윈도우를 최상위로 만들고 태스크 종료
+    if( s_qwWindowID != WINDOW_INVALIDID )
+    {
+        kMoveWindowToTop( s_qwWindowID );
+        return ;
+    }
+
+    //------------------------------------------------------------------------------------------
+    // 윈도우를 생성
+    //------------------------------------------------------------------------------------------
+    // 전체 화면 영역의 크기를 반환
+    kGetScreenArea( &stScreenArea );
+
+    // 윈도우의 크기 설정, 화면 버퍼에 들어가는 문자의 최대 너비와 높이를 고려해서 계산
+    iWindowWidth = CONSOLE_WIDTH * FONT_ENGLISHWIDTH + 4;
+    iWindowHeight = CONSOLE_HEIGHT * FONT_ENGLISHHEIGHT + WINDOW_TITLEBAR_HEIGHT + 2;
+
+    // 윈도우 생성 함수 호출, 화면 가운데에 생성
+    s_qwWindowID = kCreateWindow( ( stScreenArea.iX2 - iWindowWidth ) / 2, ( stScreenArea.iY2 - iWindowHeight ) / 2, iWindowWidth, iWindowHeight, WINDOW_FLAGS_DEFAULT, "Console Shell for GUI" );
+    // 윈도우를 생성하지 못헀으면 실패
+    if( s_qwWindowID == WINDOW_INVALIDID )
+    {
+        return ;
+    }
+    
+    // 쉘 커맨드를 처리하는 콘솔 쉘 태스크를 생성
+    kSetConsoleShellExitFlag( FALSE );
+    pstConsoleShellTask = kCreateTask( TASK_FLAGS_LOW | TASK_FLAGS_THREAD, 0, 0, ( QWORD ) kStartConsoleShell, TASK_LOADBALANCINGID );
+    if( pstConsoleShellTask == NULL )
+    {
+        // 콘솔 쉘 태스크 생성에 실패하면 윈도우를 삭제하고 종료
+        kDeleteWindow( s_qwWindowID );
+        return ;
+    }
+
+    // 콘솔 쉘 태스크의 ID를 저장
+    qwConsoleShellTaskID = pstConsoleShellTask->stLink.qwID;
+
+    // 이전 화면 버퍼를 초기화
+    kMemSet( gs_vstPreviousScreenBuffer, 0xFF, sizeof( gs_vstPreviousScreenBuffer ) );
+
+    //------------------------------------------------------------------------------------------
+    // GUI 태스크의 이벤트 처리 루프
+    //------------------------------------------------------------------------------------------
+    while( 1 )
+    {
+        // 화면 버퍼의 변경된 내용을 윈도우에 업데이트
+        kProcessConsoleBuffer( s_qwWindowID );
+
+        // 이벤트 큐에서 이벤트를 수신
+        if( kReceiveEventFromWindowQueue( s_qwWindowID, &stReceivedEvent ) == FALSE )
+        {
+            kSleep( 0 );
+            continue;
+        }
+
+        // 수신된 이벤트를 타입에 따라 나누어 처리
+        switch( stReceivedEvent.qwType )
+        {
+            // 키 이벤트 처리
+        case EVENT_KEY_DOWN:
+        case EVENT_KEY_UP:
+            // 여기에 키보드 이벤트 처리 코드 넣기
+            pstKeyEvent = &( stReceivedEvent.stKeyEvent );
+            stKeyData.bASCIICode = pstKeyEvent->bASCIICode;
+            stKeyData.bFlags = pstKeyEvent->bFlags;
+            stKeyData.bScanCode = pstKeyEvent->bScanCode;
+
+            // 키를 그래픽 모드용 키 큐로 삽입하여 쉘 태스크의 입력으로 전달
+            kPutKeyToGUIKeyQueue( &stKeyData );
+            break;
+
+            // 윈도우 이벤트 처리
+        case EVENT_WINDOW_CLOSE:
+            // 생성한 쉘 태스크가 종료되도록 종료 플래그를 설정하고 종료될 때까지 대기
+            kSetConsoleShellExitFlag( TRUE );
+            while( kIsTaskExist( qwConsoleShellTaskID ) == TRUE )
+            {
+                kSleep( 1 );
+            }
+
+            // 윈도우를 삭제하고 윈도우 ID를 초기화
+            kDeleteWindow( s_qwWindowID );
+            s_qwWindowID = WINDOW_INVALIDID;
+            return ;
+
+            break;
+
+            // 그외 정보
+        default:
+            // 여기에 알 수 없는 이벤트 처리 코드 넣기
+            break;
+        }
+    }
+}
+
+//  화면 버퍼의 변경된 내용을 GUI 콘솔 쉘 윈도우 화면에 업데이트
+static void kProcessConsoleBuffer( QWORD qwWindowID )
+{
+    int i;
+    int j;
+    CONSOLEMANAGER* pstManager;
+    CHARACTER* pstScreenBuffer;
+    CHARACTER* pstPreviousScreenBuffer;
+    RECT stLineArea;
+    BOOL bChanged;
+    static QWORD s_qwLastTickCount = 0;
+    BOOL bFullRedraw;
+
+    // 콘솔을 관리하는 자료구조를 반환 받아 화면 버퍼의 어드레스를 저장하고
+    // 이전 화면 버퍼의 어드레스도 저장
+    pstManager = kGetConsoleManager();
+    pstScreenBuffer = pstManager->pstScreenBuffer;
+    pstPreviousScreenBuffer = gs_vstPreviousScreenBuffer;
+
+    // 화면 전체를 업데이트한 지 5초가 지났으면 무조건 화면 전체를 다시 그림
+    if( kGetTickCount() - s_qwLastTickCount > 5000 )
+    {
+        s_qwLastTickCount = kGetTickCount();
+        bFullRedraw = TRUE;
+    }
+    else
+    {
+        bFullRedraw = FALSE;
+    }
+
+    // 화면 버퍼의 높이만큼 반복
+    for( j = 0 ; j < CONSOLE_HEIGHT ; j++ )
+    {
+        // 처음에는 변경되지 않은 것으로 플래그 설정
+        bChanged = FALSE;
+
+        // 현재 라인에 변화가 있는지 비교하여 변경 여부 플래그 처리
+        for( i = 0 ; i < CONSOLE_WIDTH ; i++ )
+        {
+            // 문자를 비교하여 다르거나 전체를 새로 그려야 하면 이전 화면 버퍼에
+            // 업데이트하고 변경 여부 플래그를 설정
+            if( ( pstScreenBuffer->bCharactor != pstPreviousScreenBuffer->bCharactor ) || ( bFullRedraw == TRUE ) )
+            {
+                // 문자열 화면에 출력
+                kDrawText( qwWindowID, i * FONT_ENGLISHWIDTH + 2, j * FONT_ENGLISHHEIGHT + WINDOW_TITLEBAR_HEIGHT, RGB( 0, 255, 0 ), RGB( 0, 0, 0 ), &( pstScreenBuffer->bCharactor ), 1 );
+
+                // 이전 화면 버퍼로 값을 옮겨 놓고 현재 라인에 이전과
+                // 다른 데이터가 있음을 표시
+                kMemCpy( pstPreviousScreenBuffer, pstScreenBuffer, sizeof( CHARACTER ) );
+                bChanged = TRUE;
+            }
+
+            pstScreenBuffer++;
+            pstPreviousScreenBuffer++;
+        }
+
+        // 현재 라인에서 변경된 데이터가 있다면 현재 라인만 화면에 업데이트
+        if( bChanged == TRUE )
+        {
+            // 현재 라인의 영역을 계산
+            kSetRectangleData( 2, j * FONT_ENGLISHHEIGHT + WINDOW_TITLEBAR_HEIGHT, 5 + FONT_ENGLISHWIDTH * CONSOLE_WIDTH, ( j + 1 ) * FONT_ENGLISHHEIGHT + WINDOW_TITLEBAR_HEIGHT - 1, &stLineArea );
+            // 윈도우 일부만 화면 업데이트
+            kUpdateScreenByWindowArea( qwWindowID, &stLineArea );
+        }
+    }
 }
