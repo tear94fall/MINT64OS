@@ -4,6 +4,7 @@
 #include "Font.h"
 #include "DynamicMemory.h"
 #include "Utility.h"
+#include "JPEG.h"
 
 // GUI 시스템 관련 자료구조
 static WINDOWPOOLMANAGER gs_stWindowPoolManager;
@@ -194,8 +195,13 @@ void kInitializeGUISystem( void )
     // 배경색을 모두 칠한 뒤 나타냄
     qwBackgroundWindowID = kCreateWindow( 0, 0, pstModeInfo->wXResolution, pstModeInfo->wYResolution, 0, WINDOW_BACKGROUNDWINDOWTITLE );
     gs_stWindowManager.qwBackgroundWindowID = qwBackgroundWindowID;
+    
     // 배경 윈도우 내부에 배경색을 채움
     kDrawRect( qwBackgroundWindowID, 0, 0, pstModeInfo->wXResolution - 1, pstModeInfo->wYResolution - 1, WINDOW_COLOR_SYSTEMBACKGROUND, TRUE );
+
+    // MINT64 OS의 배경 화면 이미지를 표시
+    kDrawBackgroundImage();
+    
     // 배경 윈도우를 화면에 나타냄
     kShowWindow( qwBackgroundWindowID, TRUE );
 }
@@ -1936,6 +1942,149 @@ BOOL kDrawText( QWORD qwWindowID, int iX, int iY, COLOR stTextColor, COLOR stBac
     kUnlock( &pstWindow->stLock );
 
     return TRUE;
+}
+
+//  윈도우 화면 버퍼에 버퍼의 내용을 한 번에 전송
+//      X, Y 좌표는 윈도우 내부 버퍼 기준
+BOOL kBitBlt( QWORD qwWindowID, int iX, int iY, COLOR* pstBuffer, int iWidth, int iHeight )
+{
+    WINDOW* pstWindow;
+    RECT stWindowArea;
+    RECT stBufferArea;
+    RECT stOverlappedArea;
+    int iWindowWidth;
+    int iOverlappedWidth;
+    int iOverlappedHeight;
+    int i;
+    int j;
+    int iWindowPosition;
+    int iBufferPosition;
+    int iStartX;
+    int iStartY;
+
+    // 윈도우 검색과 동기화 처리
+    pstWindow = kGetWindowWithWindowLock( qwWindowID );
+    if( pstWindow == NULL )
+    {
+        return FALSE;
+    }
+
+    // 윈도우 시작 좌표를 0, 0으로 하는 윈도우 기준 좌표로 영역을 변환
+    kSetRectangleData( 0, 0, pstWindow->stArea.iX2 - pstWindow->stArea.iX1, pstWindow->stArea.iY2 - pstWindow->stArea.iY1, &stWindowArea );
+
+    // 버퍼 영역의 좌표를 설정
+    kSetRectangleData( iX, iY, iX + iWidth - 1, iY + iHeight - 1, &stBufferArea );
+
+    // 윈도우 영역과 버퍼 영역의 겹치는 좌표를 계산
+    if( kGetOverlappedRectangle( &stWindowArea, &stBufferArea, &stOverlappedArea ) == FALSE )
+    {
+        // 동기화 처리
+        kUnlock( &pstWindow->stLock );
+        return FALSE;
+    }
+
+    // 윈도우 영역과 겹치는 영역의 너비와 높이를 계산
+    iWindowWidth = kGetRectangleWidth( &stWindowArea );
+    iOverlappedWidth = kGetRectangleWidth( &stOverlappedArea );
+    iOverlappedHeight = kGetRectangleHeight( &stOverlappedArea );
+
+    // 이미지 출력을 시작할 위치를 결정
+    // 윈도우 시작 좌표를 (0, 0)으로 설정했으므로 출력을 시작하는 좌표가 음수면
+    // 버퍼의 이미지가 그만큼 잘려서 출력
+    if( iX < 0 )
+    {
+        iStartX = iX;
+    }
+    else
+    {
+        iStartX = 0;
+    }
+
+    if( iY < 0 )
+    {
+        iStartY = iY;
+    }
+    else
+    {
+        iStartY = 0;
+    }
+
+    // 너비와 높이 계산
+    for( j = 0 ; j < iOverlappedHeight ; j++ )
+    {
+        // 화면 버퍼와 전송할 버퍼의 시작 오프셋을 계산
+        iWindowPosition = ( iWindowWidth * ( stOverlappedArea.iY1 + j ) ) + stOverlappedArea.iX1;
+        iBufferPosition = ( iWidth * j + iStartY ) + iStartX;
+
+        // 한 줄씩 복사
+        kMemCpy( pstWindow->pstWindowBuffer + iWindowPosition, pstBuffer + iBufferPosition, iOverlappedWidth * sizeof( COLOR ) );
+    }
+
+    // 동기화 처리
+    kUnlock( &pstWindow->stLock );
+    return TRUE;
+}
+
+// 배경 화면 이미지 파일이 저장된 데이터 버퍼와 버퍼의 크기
+extern unsigned char g_vbWallPaper[0];
+extern unsigned int size_g_vbWallPaper;
+
+//  배경 화면 윈도우에 배경 화면 이미지 출력
+void kDrawBackgroundImage( void )
+{
+    JPEG* pstJpeg;
+    COLOR* pstOutputBuffer;
+    WINDOWMANAGER* pstWindowManager;
+    int i;
+    int j;
+    int iMiddleX;
+    int iMiddleY;
+    int iScreenWidth;
+    int iScreenHeight;
+
+    // 윈도우 매니저를 반환
+    pstWindowManager = kGetWindowManager();
+
+    // JPEG 자료구조를 할당
+    pstJpeg = ( JPEG* ) kAllocateMemory( sizeof( JPEG ) );
+
+    // JPEG 초기화
+    if( kJPEGInit( pstJpeg, g_vbWallPaper, size_g_vbWallPaper ) == FALSE )
+    {
+        return ;
+    }
+
+    // 디코딩할 메모리 할당
+    pstOutputBuffer = ( COLOR* ) kAllocateMemory( pstJpeg->width * pstJpeg->height * sizeof( COLOR ) );
+
+    if( pstOutputBuffer == NULL )
+    {
+        kFreeMemory( pstJpeg );
+        return ;
+    }
+
+    // 디코딩 처리
+    if( kJPEGDecode( pstJpeg, pstOutputBuffer ) == FALSE )
+    {
+        // 디코딩이 실패하면 할당받았던 버퍼를 모두 반환
+        kFreeMemory( pstOutputBuffer );
+        kFreeMemory( pstJpeg );
+        return ;
+    }
+
+    // 디코딩된 이미지를 윈도우 화면 가운데에 표시
+    iScreenWidth = kGetRectangleWidth( &( pstWindowManager->stScreenArea ) );
+    iScreenHeight = kGetRectangleHeight( &( pstWindowManager->stScreenArea ) );
+    
+    iMiddleX = ( iScreenWidth -  pstJpeg->width ) / 2;
+    iMiddleY = ( iScreenHeight - pstJpeg->height ) / 2;
+
+    // 메모리에서 메모리로 한꺼번에 복사
+    kBitBlt( pstWindowManager->qwBackgroundWindowID, iMiddleX, iMiddleY, pstOutputBuffer, pstJpeg->width, pstJpeg->height );
+
+    // 할당받았던 버퍼를 모두 반환
+    kFreeMemory( pstOutputBuffer );
+    kFreeMemory( pstJpeg );
 }
 
 //==============================================================================

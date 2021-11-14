@@ -35,7 +35,9 @@ GUITask.o: ../Source/GUITask.c ../Source/GUITask.h ../Source/Types.h \
  ../Source/Window.h ../Source/Synchronization.h ../Source/2DGraphics.h \
  ../Source/List.h ../Source/Queue.h ../Source/Keyboard.h \
  ../Source/MultiProcessor.h ../Source/Font.h ../Source/Console.h \
- ../Source/Task.h ../Source/ConsoleShell.h
+ ../Source/Task.h ../Source/ConsoleShell.h ../Source/FileSystem.h \
+ ../Source/HardDisk.h ../Source/CacheManager.h ../Source/JPEG.h \
+ ../Source/DynamicMemory.h
 HardDisk.o: ../Source/HardDisk.c ../Source/HardDisk.h ../Source/Types.h \
  ../Source/Synchronization.h
 IOAPIC.o: ../Source/IOAPIC.c ../Source/IOAPIC.h ../Source/Types.h \
@@ -47,6 +49,8 @@ InterruptHandler.o: ../Source/InterruptHandler.c \
  ../Source/Utility.h ../Source/VBE.h ../Source/Task.h ../Source/List.h \
  ../Source/Descriptor.h ../Source/AssemblyUtility.h ../Source/HardDisk.h \
  ../Source/Mouse.h
+JPEG.o: ../Source/JPEG.c ../Source/JPEG.h ../Source/Types.h \
+ ../Source/2DGraphics.h
 Keyboard.o: ../Source/Keyboard.c ../Source/Types.h \
  ../Source/AssemblyUtility.h ../Source/Task.h ../Source/List.h \
  ../Source/Synchronization.h ../Source/Keyboard.h ../Source/Queue.h
@@ -92,10 +96,12 @@ Utility.o: ../Source/Utility.c ../Source/Utility.h ../Source/Types.h \
  ../Source/VBE.h ../Source/AssemblyUtility.h ../Source/Task.h \
  ../Source/List.h ../Source/Synchronization.h
 VBE.o: ../Source/VBE.c ../Source/VBE.h ../Source/Types.h
+WallPaper.o: ../Source/WallPaper.c
 Window.o: ../Source/Window.c ../Source/Window.h ../Source/Types.h \
  ../Source/Synchronization.h ../Source/2DGraphics.h ../Source/List.h \
  ../Source/Queue.h ../Source/Keyboard.h ../Source/VBE.h ../Source/Task.h \
- ../Source/Font.h ../Source/DynamicMemory.h ../Source/Utility.h
+ ../Source/Font.h ../Source/DynamicMemory.h ../Source/Utility.h \
+ ../Source/JPEG.h
 WindowManagerTask.o: ../Source/WindowManagerTask.c ../Source/Types.h \
  ../Source/Window.h ../Source/Synchronization.h ../Source/2DGraphics.h \
  ../Source/List.h ../Source/Queue.h ../Source/Keyboard.h \

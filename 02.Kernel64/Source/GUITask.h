@@ -2,6 +2,7 @@
 #define __GUITASK_H__
 
 #include "Types.h"
+#include "Window.h"
 
 // 매크로
 // 태스크가 보내는 유저 이벤트 타입 정의
@@ -34,5 +35,10 @@ static void kDrawMemoryInformation( QWORD qwWindowID, int iY, int iWindowWidth )
 // GUI 콘솔 쉘 태스크 함수
 void kGUIConsoleShellTask( void );
 static void kProcessConsoleBuffer( QWORD qwWindowID );
+
+// 이미지 뷰어 태스크 함수
+void kImageViewerTask( void );
+static void kDrawFileName( QWORD qwWindowID, RECT* pstArea, char *pcFileName, int iNameLength );
+static BOOL kCreateImageViewerWindowAndExecute( QWORD qwMainWindowID, const char* pcFileName );
 
 #endif /*__GUITASK_H__*/

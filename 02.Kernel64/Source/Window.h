@@ -303,6 +303,8 @@ BOOL kDrawText( QWORD qwWindowID, int iX, int iY, COLOR stTextColor, COLOR stBac
 static void kDrawCursor( int iX, int iY );
 void kMoveCursor( int iX, int iY );
 void kGetCursorPosition( int* piX, int* piY );
+BOOL kBitBlt( QWORD qwWindowID, int iX, int iY, COLOR* pstBuffer, int iWidth, int iHeight );
+void kDrawBackgroundImage( void );
 
 //  화면 업데이트에 사용하는 화면 업데이트 비트맵 관련
 BOOL kCreateDrawBitmap( const RECT* pstArea, DRAWBITMAP* pstDrawBitmap );

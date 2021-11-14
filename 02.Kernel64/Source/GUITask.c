@@ -5,6 +5,9 @@
 #include "Console.h"
 #include "Task.h"
 #include "ConsoleShell.h"
+#include "FileSystem.h"
+#include "JPEG.h"
+#include "DynamicMemory.h"
 
 //------------------------------------------------------------------------------------------
 //  기본 GUI 태스크
@@ -614,7 +617,7 @@ static void kDrawMemoryInformation( QWORD qwWindowID, int iY, int iWindowWidth )
 //------------------------------------------------------------------------------------------
 //  GUI 버전의 콘솔 쉘 태스크
 //------------------------------------------------------------------------------------------
-// 이전 화면 버퍼에 값을 보관하는 영역
+//  이전 화면 버퍼에 값을 보관하는 영역
 static CHARACTER gs_vstPreviousScreenBuffer[ CONSOLE_WIDTH * CONSOLE_HEIGHT ];
 
 //  GUI 버전의 콘솔 쉘 태스크
@@ -801,4 +804,380 @@ static void kProcessConsoleBuffer( QWORD qwWindowID )
             kUpdateScreenByWindowArea( qwWindowID, &stLineArea );
         }
     }
+}
+
+//------------------------------------------------------------------------------------------
+//  이미지 뷰어
+//------------------------------------------------------------------------------------------
+//  이미지 뷰어 태스크
+void kImageViewerTask( void )
+{
+    QWORD qwWindowID;
+    int iMouseX, iMouseY;
+    int iWindowWidth, iWindowHeight;
+    int iEditBoxWidth;
+    RECT stEditBoxArea;
+    RECT stButtonArea;
+    RECT stScreenArea;
+    EVENT stReceivedEvent;
+    EVENT stSendEvent;
+    char vcFileName[ FILESYSTEM_MAXFILENAMELENGTH + 1 ];
+    int iFileNameLength;
+    MOUSEEVENT* pstMouseEvent;
+    KEYEVENT* pstKeyEvent;
+    POINT stScreenXY;
+    POINT stClientXY;
+
+    //------------------------------------------------------------------------------------------
+    // 그래픽 모드 판단
+    //------------------------------------------------------------------------------------------
+    // MINT64 OS가 그래픽 모드로 시작했는지 확인
+    if( kIsGraphicMode() == FALSE )
+    {
+        // MINT64 OS가 그래픽 모드로 시작하지 않았다면 실패
+        kPrintf( "This task can run only GUI mode~!!!\n" );
+        return ;
+    }
+
+    //------------------------------------------------------------------------------------------
+    // 윈도우를 생성
+    //------------------------------------------------------------------------------------------
+    // 전체 화면 영역 크기를 반환
+    kGetScreenArea( &stScreenArea );
+
+    // 윈도우의 크기 설정, 화면 버퍼에 들어가는 문자의 최대 너비와 높이를 고려해서 계산
+    iWindowWidth = FONT_ENGLISHWIDTH * FILESYSTEM_MAXFILENAMELENGTH + 165;
+    iWindowHeight = 35 + WINDOW_TITLEBAR_HEIGHT + 5;
+
+    // 윈도우 생성 함수 호출. 화면 가운데에 생성
+    qwWindowID = kCreateWindow( ( stScreenArea.iX2 - iWindowWidth ) / 2, ( stScreenArea.iY2 - iWindowHeight ) / 2, iWindowWidth, iWindowHeight, WINDOW_FLAGS_DEFAULT & ~WINDOW_FLAGS_SHOW, "Image Viewer" );
+    // 윈도우를 생성하지 못했으면 실패
+    if( qwWindowID == WINDOW_INVALIDID )
+    {
+        return ;
+    }
+
+    // 파일 이름을 입력하는 에디트 박스 영역을 표시
+    kDrawText( qwWindowID, 5, WINDOW_TITLEBAR_HEIGHT + 6, RGB( 0, 0, 0 ), WINDOW_COLOR_BACKGROUND, "FILE NAME", 9 );
+    iEditBoxWidth = FONT_ENGLISHWIDTH * FILESYSTEM_MAXFILENAMELENGTH + 4;
+    kSetRectangleData( 85, WINDOW_TITLEBAR_HEIGHT + 5, 85 + iEditBoxWidth, WINDOW_TITLEBAR_HEIGHT + 25, &stEditBoxArea );
+    kDrawRect( qwWindowID, stEditBoxArea.iX1, stEditBoxArea.iY1, stEditBoxArea.iX2, stEditBoxArea.iY2, RGB( 0, 0, 0 ), FALSE );
+
+    // 파일 이름 버퍼를 비우고 에디트 박스에 빈 파일 이름을 표시
+    iFileNameLength = 0;
+    kMemSet( vcFileName, 0, sizeof( vcFileName ) );
+    kDrawFileName( qwWindowID, &stEditBoxArea, vcFileName, iFileNameLength );
+
+    // 이미지 출력 버튼 영역을 지정
+    kSetRectangleData( stEditBoxArea.iX2 + 10, stEditBoxArea.iY1, stEditBoxArea.iX2 + 70, stEditBoxArea.iY2, &stButtonArea );
+    kDrawButton( qwWindowID, &stButtonArea, WINDOW_COLOR_BACKGROUND, "Show", RGB( 0, 0, 0 ) );
+
+    // 윈도으를 표시
+    kShowWindow( qwWindowID, TRUE );
+
+    //------------------------------------------------------------------------------------------
+    // GUI 태스크의 이벤트 처리 루프
+    //------------------------------------------------------------------------------------------
+    while( 1 )
+    {
+        // 이벤트 큐에서 이벤트를 수신
+        if( kReceiveEventFromWindowQueue( qwWindowID, &stReceivedEvent ) == FALSE )
+        {
+            kSleep( 0 );
+            continue;
+        }
+
+        // 수신된 이벤트를 타입에 따라 나누어 처리
+        switch( stReceivedEvent.qwType )
+        {
+            // 마우스 이벤트 처리
+        case EVENT_MOUSE_LBUTTONDOWN:
+            pstMouseEvent = &( stReceivedEvent.stMouseEvent );
+
+            // 마우스 왼쪽 버튼이 이미지 출력 버튼위에서 눌러졌으면 저장된 파일 이름을
+            // 이용하여 이미지를 화면에 표시
+            if( kIsInRectangle( &stButtonArea, pstMouseEvent->stPoint.iX, pstMouseEvent->stPoint.iY ) == TRUE )
+            {
+                // 버튼을 눌린 것으로 표시
+                kDrawButton( qwWindowID, &stButtonArea, RGB( 79, 204, 11 ), "Show", RGB( 255, 255, 255 ) );
+                // 버튼이 있는 영역만 화면 업데이트
+                kUpdateScreenByWindowArea( qwWindowID, &( stButtonArea ) );
+                
+                // 이미지 출력 윈도우를 생성하고 이벤트 처리
+                if( kCreateImageViewerWindowAndExecute( qwWindowID, vcFileName ) == FALSE )
+                {
+                    // 윈도우 생성에 실패하면 버튼이 눌러졌다가 떨어지는 효과를 주려고
+                    // 200ms 대기
+                    kSleep( 200 );
+                }
+
+                // 버튼을 떨어진 것으로 표시
+                kDrawButton( qwWindowID, &stButtonArea, WINDOW_COLOR_BACKGROUND, "Show", RGB( 0, 0, 0 ) );
+                // 버튼이 있는 영역만 화면 업데이트
+                kUpdateScreenByWindowArea( qwWindowID, &( stButtonArea ) );
+            }
+            break;
+
+            // 키 이벤트 처리
+        case EVENT_KEY_DOWN:
+            pstKeyEvent = &( stReceivedEvent.stKeyEvent );
+
+            // 백스페이스 키는 삽입된 문자를 삭제
+            if( ( pstKeyEvent->bASCIICode == KEY_BACKSPACE ) && ( iFileNameLength > 0 ) )
+            {
+                // 버퍼에 삽입된 마지막 문자를 삭제
+                vcFileName[ iFileNameLength ] = '\0';
+                iFileNameLength--;
+
+                // 입력된 내용을 에디트 박스에 표시
+                kDrawFileName( qwWindowID, &stEditBoxArea, vcFileName, iFileNameLength );
+            }
+            // 엔터 키는 이미지 출력 버튼이 눌린 것으로 처리
+            else if( ( pstKeyEvent->bASCIICode == KEY_ENTER ) && ( iFileNameLength > 0 ) )
+            {
+                // 버튼의 XY 좌표를 화면 좌표로 변환하여 마우스 이벤트 좌표로 사용
+                stClientXY.iX = stButtonArea.iX1 + 1;
+                stClientXY.iY = stButtonArea.iY1 + 1;
+                kConvertPointClientToScreen( qwWindowID, &stClientXY, &stScreenXY );
+
+                // 이미지 출력 버튼에 마우스 왼쪽이 눌린 것처럼 마우스 이벤트 전송
+                kSetMouseEvent( qwWindowID, EVENT_MOUSE_LBUTTONDOWN, stScreenXY.iX + 1, stScreenXY.iY + 1, 0, &stSendEvent );
+                kSendEventToWindow( qwWindowID, &stSendEvent );
+            }
+            // ESC 키는 윈도우 닫힘 버튼이 눌러진 것으로 처리
+            else if( pstKeyEvent->bASCIICode == KEY_ESC )
+            {
+                // 윈도우 닫기 이벤트를 윈도우로 전송
+                kSetWindowEvent( qwWindowID, EVENT_WINDOW_CLOSE, &stSendEvent );
+                kSendEventToWindow( qwWindowID, &stSendEvent );
+            }
+            // 그외 키는 파일 이름 버퍼에 공간이 있을 때만 버퍼에 삽입
+            else if( ( pstKeyEvent->bASCIICode <= 128 ) && ( pstKeyEvent->bASCIICode != KEY_BACKSPACE ) && ( iFileNameLength <FILESYSTEM_MAXFILENAMELENGTH ) )
+            {
+                // 입력된 키를 파일 이름 버퍼의 마지막에 삽입
+                vcFileName[ iFileNameLength ] = pstKeyEvent->bASCIICode;
+                iFileNameLength++;
+
+                // 입력된 내용을 에디트 박스에 표시
+                kDrawFileName( qwWindowID, &stEditBoxArea, vcFileName, iFileNameLength );
+            }
+            break;
+
+            // 윈도우 이벤트 처리
+        case EVENT_WINDOW_CLOSE:
+            if( stReceivedEvent.qwType == EVENT_WINDOW_CLOSE )
+            {
+                // 윈도우 삭제
+                kDeleteWindow( qwWindowID );
+                return ;
+            }
+            break;
+
+            // 그외 정보
+        default:
+            // 여기에 알 수 없는 이벤트 처리 코드 넣기
+            break;
+        }
+    }
+}
+
+//  에디트 박스 영역에 문자를 출력
+static void kDrawFileName( QWORD qwWindowID, RECT* pstArea, char *pcFileName, int iNameLength )
+{
+    // 에디트 박스의 배경을 모두 흰색으로 채움
+    kDrawRect( qwWindowID, pstArea->iX1 + 1, pstArea->iY1 + 1, pstArea->iX2 - 1, pstArea->iY2 - 1, WINDOW_COLOR_BACKGROUND, TRUE );
+
+    // 파일 이름을 출력
+    kDrawText( qwWindowID, pstArea->iX1 + 2, pstArea->iY1 + 2, RGB( 0, 0, 0 ), WINDOW_COLOR_BACKGROUND, pcFileName, iNameLength );
+
+    // 파일 이름의 길이가 파일 시스템이 정의한 최대 길이가 아니면 커서를 출력
+    if( iNameLength < FILESYSTEM_MAXFILENAMELENGTH )
+    {
+        kDrawText( qwWindowID, pstArea->iX1 + 2 + FONT_ENGLISHWIDTH * iNameLength, pstArea->iY1 + 2, RGB( 0, 0, 0 ), WINDOW_COLOR_BACKGROUND, "_", 1 );
+    }
+
+    // 에디트 박스 영역만 화면 업데이트
+    kUpdateScreenByWindowArea( qwWindowID, pstArea );
+}
+
+//  JPEG 파일을 읽어서 새로 생성한 윈도우에 표시하고 이벤트를 처리
+static BOOL kCreateImageViewerWindowAndExecute( QWORD qwMainWindowID, const char* pcFileName )
+{
+    DIR* pstDirectory;
+    struct dirent* pstEntry;
+    DWORD dwFileSize;
+    RECT stScreenArea;
+    QWORD qwWindowID;
+    WINDOW* pstWindow;
+    BYTE* pbFileBuffer;
+    COLOR* pstOutputBuffer;
+    int iWindowWidth;
+    FILE* fp;
+    JPEG* pstJpeg;
+    EVENT stReceivedEvent;
+    KEYEVENT* pstKeyEvent;
+
+    // 초기화
+    fp = NULL;
+    pbFileBuffer = NULL;
+    pstOutputBuffer = NULL;
+    qwWindowID = WINDOW_INVALIDID;
+
+    //------------------------------------------------------------------------------------------
+    // 루프 디렉토리를 열어서 파일을 검색
+    //------------------------------------------------------------------------------------------
+    pstDirectory = opendir( "/" );
+    dwFileSize = 0;
+
+    // 디렉토리 에서 파일을 검색
+    while( 1 )
+    {
+        // 디렉토리에서 엔트리 하나를 읽음
+        pstEntry = readdir( pstDirectory );
+        // 더이상 파일이 없으면 나감
+        if( pstEntry == NULL )
+        {
+            break;
+        }
+
+        // 파일 이름의 길이와 내용이 같은 것을 검색
+        if( ( kStrLen( pstEntry->d_name ) == kStrLen( pcFileName ) ) && ( kMemCmp( pstEntry->d_name, pcFileName, kStrLen( pcFileName ) ) == 0 ) )
+        {
+            dwFileSize = pstEntry->dwFileSize;
+            break;
+        }
+    }
+
+    // 디렉토리 핸들을 반환. 핸들을 반환하지 않으면 메모리가 해제되지 않고 남으므로
+    // 꼭 해제 해야함
+    closedir( pstDirectory );
+
+    if( dwFileSize == 0 )
+    {
+        kPrintf( "[ImageViewer] %s file doesn't exist or size is zero\n", pcFileName );
+        return FALSE;
+    }
+
+    //------------------------------------------------------------------------------------------
+    // 파일을 읽은 후 이미지 디코딩
+    //------------------------------------------------------------------------------------------
+    // 파일 읽기
+    fp = fopen( pcFileName, "rb" );
+    if( fp == NULL )
+    {
+        kPrintf( "[ImageViewer] %s file open fail\n", pcFileName );
+        return FALSE;
+    }
+
+    // 메모리 파일 크기만큼 할당하고 JPEG 자료구조를 할당
+    pbFileBuffer = ( BYTE* ) kAllocateMemory( dwFileSize );
+    pstJpeg = ( JPEG* ) kAllocateMemory( sizeof( JPEG ) );
+    if( ( pbFileBuffer == NULL ) || ( pstJpeg == NULL ) )
+    {
+        kPrintf( "[ImageViewer] Buffer allocation fail\n" );
+        kFreeMemory( pbFileBuffer );
+        kFreeMemory( pstJpeg );
+        fclose( fp );
+        return FALSE;
+    }
+
+    // 파일을 읽은 후 JPEG 파일 포맷인지 확인
+    if( ( fread( pbFileBuffer, 1, dwFileSize, fp ) != dwFileSize ) || ( kJPEGInit( pstJpeg, pbFileBuffer, dwFileSize ) == FALSE ) )
+    {
+        kPrintf( "[ImageViewer] Read fail or file is not JPEG format\n" );
+        kFreeMemory( pbFileBuffer );
+        kFreeMemory( pstJpeg );
+        fclose( fp );
+        return FALSE;
+    }
+
+    // 디코드 결과 출력용 버퍼를 생성
+    pstOutputBuffer = kAllocateMemory( pstJpeg->width * pstJpeg->height * sizeof( COLOR ) );
+    // 디코드를 수행한 뒤 정상적으로 처리되었다면 윈도우를 생성
+    if( ( pstOutputBuffer != NULL ) && ( kJPEGDecode( pstJpeg, pstOutputBuffer ) == TRUE ) )
+    {
+        // 전체 화면 영역의 크기를 반환
+        kGetScreenArea( &stScreenArea );
+        // 윈도우를 생성, 이미지의 크기와 제목 표시줄의 크기를 고려
+        qwWindowID = kCreateWindow( ( stScreenArea.iX2 - pstJpeg->width ) / 2, ( stScreenArea.iY2 - pstJpeg->height ) / 2, pstJpeg->width, pstJpeg->height + WINDOW_TITLEBAR_HEIGHT, WINDOW_FLAGS_DEFAULT & ~WINDOW_FLAGS_SHOW, pcFileName );
+    }
+
+    // 윈도우 생성에 실패하거나 출력 버퍼 할당 또는 디코딩에 실패하면 종료
+    if( ( qwWindowID == WINDOW_INVALIDID ) || ( pstOutputBuffer == NULL ) )
+    {
+        kPrintf( "[ImageViewer] Window create fail or output buffer allocation fail\n" );
+        kFreeMemory( pbFileBuffer );
+        kFreeMemory( pstJpeg );
+        kFreeMemory( pstOutputBuffer );
+        kDeleteWindow( qwWindowID );
+        return FALSE;
+    }
+
+    // 윈도우의 너비를 구하여 제목 표시줄 영역을 제외한 나머지 화면 버퍼 영역에 디코딩된 이미지를 복사
+    pstWindow = kGetWindowWithWindowLock( qwWindowID );
+    if( pstWindow != NULL )
+    {
+        iWindowWidth = kGetRectangleWidth( &( pstWindow->stArea ) );
+        kMemCpy( pstWindow->pstWindowBuffer + ( WINDOW_TITLEBAR_HEIGHT * iWindowWidth ), pstOutputBuffer, pstJpeg->width * pstJpeg->height * sizeof( COLOR ) );
+
+        // 동기화 처리
+        kUnlock( &( pstWindow->stLock ) );
+    }
+
+    // 파일 버퍼를 해제하고 윈도우를 화면에 표시
+    kFreeMemory( pbFileBuffer );
+    kFreeMemory( pstJpeg );
+    kFreeMemory( pstOutputBuffer );
+    kShowWindow( qwWindowID, TRUE );
+
+    //------------------------------------------------------------------------------------------
+    //  ESC 키와 윈도우 닫기 버튼을 처리하는 간단한 이벤트 루프
+    //------------------------------------------------------------------------------------------
+    kShowWindow( qwMainWindowID, FALSE );
+
+    while( 1 )
+    {
+        // 이벤트 큐에서 이벤트를 수신
+        if( kReceiveEventFromWindowQueue( qwWindowID, &stReceivedEvent ) == FALSE )
+        {
+            kSleep( 0 );
+            continue;
+        }
+
+        // 수신된 이벤트를 타입에 따라 나누어 처리
+        switch( stReceivedEvent.qwType )
+        {
+            // 키 이벤트 처리
+        case EVENT_KEY_DOWN:
+            pstKeyEvent = &( stReceivedEvent.stKeyEvent );
+            // ESC 키가 눌리면 그림을 표시하는 윈도우를 삭제하고 파일 이름 입력 윈도우를
+            // 표시한 뒤 종료
+            if( pstKeyEvent->bASCIICode == KEY_ESC )
+            {
+                kDeleteWindow( qwWindowID );
+                kShowWindow( qwMainWindowID, TRUE );
+                return TRUE;
+            }
+            break;
+
+            // 윈도우 이벤트 처리
+        case EVENT_WINDOW_CLOSE:
+            // 닫기 버튼이 눌리면 이미지 출력 윈도우를 삭제하고 파일 이름 입력 윈도우를
+            // 표시한 뒤 종료
+            if( stReceivedEvent.qwType == EVENT_WINDOW_CLOSE )
+            {
+                kDeleteWindow( qwWindowID );
+                kShowWindow( qwMainWindowID, TRUE );
+                return TRUE;
+            }
+            break;
+
+            // 그외 정보
+        default:
+            // 여기에 알 수 없는 이벤트 처리 코드 넣기
+            break;
+        }
+    }
+
+    return TRUE;
 }
