@@ -188,6 +188,11 @@ void kInitializeGUISystem( void )
     gs_stWindowManager.bWindowMoveMode = FALSE;
     gs_stWindowManager.qwMovingWindowID = WINDOW_INVALIDID;
 
+    // 윈도우 크기 변경 정보를 초기화
+    gs_stWindowManager.bWindowResizeMode = FALSE;
+    gs_stWindowManager.qwResizingWindowID = WINDOW_INVALIDID;
+    kMemSet( &( gs_stWindowManager.stResizingWindowArea ), 0, sizeof( RECT ) );
+
     //------------------------------------------------------------------------------
     // 배경 윈도우 생성
     //------------------------------------------------------------------------------
@@ -236,6 +241,21 @@ QWORD kCreateWindow( int iX, int iY, int iWidth, int iHeight, DWORD dwFlags, con
     if( ( iWidth <= 0 ) || ( iHeight <= 0 ) )
     {
         return WINDOW_INVALIDID;
+    }
+
+    // 윈도우에 제목 표시줄이 있으면 최소 크기 변경 버튼과 닫기 버튼이 표시될 자리는
+    // 필요하므로 최소 크기 이하면 그 이상으로 설정
+    if( dwFlags & WINDOW_FLAGS_DRAWTITLE )
+    {
+        if( iWidth < WINDOW_WIDTH_MIN )
+        {
+            iWidth = WINDOW_WIDTH_MIN;
+        }
+
+        if( iHeight < WINDOW_HEIGHT_MIN )
+        {
+            iHeight = WINDOW_WIDTH_MIN;
+        }
     }
 
     // 윈도우 자료구조를 할당
@@ -1115,6 +1135,112 @@ static BOOL kUpdateWindowTitle( QWORD qwWindowID, BOOL bSelectedTitle )
     return FALSE;
 }
 
+//  윈도우의 크기를 변경
+BOOL kResizeWindow( QWORD qwWindowID, int iX, int iY, int iWidth, int iHeight )
+{
+    WINDOW* pstWindow;
+    COLOR* pstNewWindowBuffer;
+    COLOR* pstOldWindowBuffer;
+    RECT stPreviousArea;
+
+    // 윈도우 검색과 동기화 처리
+    pstWindow = kGetWindowWithWindowLock( qwWindowID );
+    if( pstWindow == NULL )
+    {
+        return FALSE;
+    }
+
+    // 윈도우에 제목 표시줄이 있으면 최소 크기 변경 버튼과 닫기 버튼이 표시될 자리는
+    // 필요하므로 최소 크기 이하면 그 이상으로 설정
+    if( pstWindow->dwFlags & WINDOW_FLAGS_DRAWTITLE )
+    {
+        if( iWidth < WINDOW_WIDTH_MIN )
+        {
+            iWidth = WINDOW_WIDTH_MIN;
+        }
+
+        if( iHeight < WINDOW_HEIGHT_MIN )
+        {
+            iHeight = WINDOW_HEIGHT_MIN;
+        }
+    }
+
+    // 새로운 크기의 화면 버퍼를 할당
+    pstNewWindowBuffer = ( COLOR* ) kAllocateMemory( iWidth * iHeight * sizeof( COLOR ) );
+
+    if( pstNewWindowBuffer == NULL )
+    {
+        // 메모리 할당에 실패하면 종료
+        kUnlock( &( pstWindow->stLock ) );
+        return FALSE;
+    }
+
+    // 새로운 화면 버퍼를 설정하고 이전 버퍼를 해제
+    pstOldWindowBuffer = pstWindow->pstWindowBuffer;
+    pstWindow->pstWindowBuffer = pstNewWindowBuffer;
+    kFreeMemory( pstOldWindowBuffer );
+
+    // 윈도우 크기 정보를 저장하고 새로운 크기로 변경
+    kMemCpy( &stPreviousArea, &( pstWindow->stArea ), sizeof( RECT ) );
+    pstWindow->stArea.iX1 = iX;
+    pstWindow->stArea.iY1 = iY;
+    pstWindow->stArea.iX2 = iX + iWidth - 1;
+    pstWindow->stArea.iY2 = iY + iHeight - 1;
+
+    // 윈도우 배경 그리기
+    kDrawWindowBackground( qwWindowID );
+
+    // 윈도우 테두리 그리기
+    if( pstWindow->dwFlags & WINDOW_FLAGS_DRAWFRAME )
+    {
+        kDrawWindowFrame( qwWindowID );
+    }
+
+    // 윈도우 제목 표시줄 그리기
+    if( pstWindow->dwFlags & WINDOW_FLAGS_DRAWTITLE )
+    {
+        kDrawWindowTitle( qwWindowID, pstWindow->vcWindowTitle, TRUE );
+    }
+
+    // 동기화 처리
+    kUnlock( &( pstWindow->stLock ) );
+
+    // 윈도우를 화면에 표시하는 속성이 있으면 윈도우를 화면에 업데이트
+    if( pstWindow->dwFlags & WINDOW_FLAGS_SHOW )
+    {
+        // 이전 윈도우 영역을 다시 그림
+        kUpdateScreenByScreenArea( &stPreviousArea );
+
+        // 새로운 영역을 다시 그림
+        kShowWindow( qwWindowID, TRUE );
+    }
+
+    return TRUE;
+}
+
+//  X, Y좌표가 윈도우의 크기 변경 버튼 위에 있는지를 반환
+BOOL kIsInResizeButton( QWORD qwWindowID, int iX, int iY )
+{
+    WINDOW* pstWindow;
+
+    // 윈도우를 검색
+    pstWindow = kGetWindow( qwWindowID );
+
+    // 윈도우 또는 제목 표시줄이 없거나 크기 변경 속성이 없으면 처리할 필요가 없음
+    if( ( pstWindow == NULL ) || ( ( pstWindow->dwFlags & WINDOW_FLAGS_DRAWTITLE ) == 0 ) || ( ( pstWindow->dwFlags & WINDOW_FLAGS_RESIZABLE ) == 0 ) )
+    {
+        return FALSE;
+    }
+
+    // 좌표가 윈도우 크기 변경 버튼 영역에 있는지를 비교
+    if( ( ( pstWindow->stArea.iX2 - ( WINDOW_XBUTTON_SIZE * 2 ) - 2 ) <= iX ) && ( iX <= ( pstWindow->stArea.iX2 - ( WINDOW_XBUTTON_SIZE * 1 ) - 2 ) ) && ( ( pstWindow->stArea.iY1 + 1 ) <= iY ) && ( iY <= ( pstWindow->stArea.iY1 + 1 + WINDOW_XBUTTON_SIZE ) ) )
+    {
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
 //==============================================================================
 //  화면 좌표 <--> 윈도우 좌표 변환 관련 함수
 //==============================================================================
@@ -1633,6 +1759,46 @@ BOOL kDrawWindowTitle( QWORD qwWindowID, const char* pcTitle, BOOL bSelectedTitl
 
     // 동기화 처리
     kUnlock( &( pstWindow->stLock ) );
+    
+    //------------------------------------------------------------------------------
+    // 윈도우 크기 변경 버튼 그리기
+    //------------------------------------------------------------------------------
+    if( pstWindow->dwFlags & WINDOW_FLAGS_RESIZABLE )
+    {
+        // 크기 변경 버튼을 그림, 오른쪽 위에 있는 닫기 버튼 옆에 그림
+        stButtonArea.iX1 = iWidth - ( WINDOW_XBUTTON_SIZE * 2 ) - 2;
+        stButtonArea.iY1 = 1;
+        stButtonArea.iX2 = iWidth - WINDOW_XBUTTON_SIZE - 2;
+        stButtonArea.iY2 = WINDOW_XBUTTON_SIZE - 1;
+        kDrawButton( qwWindowID, &stButtonArea, WINDOW_COLOR_BACKGROUND, "", WINDOW_COLOR_BACKGROUND );
+
+        // 윈도우 검색과 동기화 처리
+        pstWindow = kGetWindowWithWindowLock( qwWindowID );
+        if( pstWindow == NULL )
+        {
+            return FALSE;
+        }
+
+        // 크기 변경 버튼 내부에 대각선 화살표 3픽셀로 표시
+        kInternalDrawLine( &stArea, pstWindow->pstWindowBuffer, stButtonArea.iX1 + 4, stButtonArea.iY2 - 4, stButtonArea.iX2 - 5, stButtonArea.iY1 + 3, WINDOW_COLOR_XBUTTONLINECOLOR );
+        kInternalDrawLine( &stArea, pstWindow->pstWindowBuffer, stButtonArea.iX1 + 4, stButtonArea.iY2 - 3, stButtonArea.iX2 - 4, stButtonArea.iY1 + 3, WINDOW_COLOR_XBUTTONLINECOLOR );
+        kInternalDrawLine( &stArea, pstWindow->pstWindowBuffer, stButtonArea.iX1 + 5, stButtonArea.iY2 - 3, stButtonArea.iX2 - 4, stButtonArea.iY1 + 4, WINDOW_COLOR_XBUTTONLINECOLOR );
+
+        // 오른쪽 위의 화살표
+        kInternalDrawLine( &stArea, pstWindow->pstWindowBuffer, stButtonArea.iX1 + 9, stButtonArea.iY1 + 3, stButtonArea.iX2 - 4, stButtonArea.iY1 + 3, WINDOW_COLOR_XBUTTONLINECOLOR );
+        kInternalDrawLine( &stArea, pstWindow->pstWindowBuffer, stButtonArea.iX1 + 9, stButtonArea.iY1 + 4, stButtonArea.iX2 - 4, stButtonArea.iY1 + 4, WINDOW_COLOR_XBUTTONLINECOLOR );
+        kInternalDrawLine( &stArea, pstWindow->pstWindowBuffer, stButtonArea.iX2 - 4, stButtonArea.iY1 + 5, stButtonArea.iX2 - 4, stButtonArea.iY1 + 9, WINDOW_COLOR_XBUTTONLINECOLOR );
+        kInternalDrawLine( &stArea, pstWindow->pstWindowBuffer, stButtonArea.iX2 - 5, stButtonArea.iY1 + 5, stButtonArea.iX2 - 5, stButtonArea.iY1 + 9, WINDOW_COLOR_XBUTTONLINECOLOR );
+
+        // 왼쪽 아래의 화살표
+        kInternalDrawLine( &stArea, pstWindow->pstWindowBuffer, stButtonArea.iX1 + 4, stButtonArea.iY1 + 8, stButtonArea.iX1 + 4, stButtonArea.iY2 - 3, WINDOW_COLOR_XBUTTONLINECOLOR );
+        kInternalDrawLine( &stArea, pstWindow->pstWindowBuffer, stButtonArea.iX1 + 5, stButtonArea.iY1 + 8, stButtonArea.iX1 + 5, stButtonArea.iY2 - 3, WINDOW_COLOR_XBUTTONLINECOLOR );
+        kInternalDrawLine( &stArea, pstWindow->pstWindowBuffer, stButtonArea.iX1 + 6, stButtonArea.iY2 - 4, stButtonArea.iX1 + 10, stButtonArea.iY2 - 4, WINDOW_COLOR_XBUTTONLINECOLOR );
+        kInternalDrawLine( &stArea, pstWindow->pstWindowBuffer, stButtonArea.iX1 + 6, stButtonArea.iY2 - 3, stButtonArea.iX1 + 10, stButtonArea.iY2 - 3, WINDOW_COLOR_XBUTTONLINECOLOR );
+
+        // 동기화 처리
+        kUnlock( &( pstWindow->stLock ) );
+    }
 
     return TRUE;
 }

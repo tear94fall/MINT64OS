@@ -15,6 +15,7 @@ void kStartWindowManager( void )
     BOOL bMouseDataResult;
     BOOL bKeyDataResult;
     BOOL bEventQueueResult;
+    WINDOWMANAGER* pstWindowManager;
 
     // GUI 시스템을 초기화
     kInitializeGUISystem();
@@ -25,6 +26,9 @@ void kStartWindowManager( void )
 
     // 애플리케이션 패널 태스크를 실행
     kCreateTask( TASK_FLAGS_SYSTEM | TASK_FLAGS_THREAD | TASK_FLAGS_LOW, 0, 0, ( QWORD ) kApplicationPanelGUITask, TASK_LOADBALANCINGID );
+
+    // 윈도우 매니저를 반환
+    pstWindowManager = kGetWindowManager();
 
     // 윈도우 매니저 태스크 루프
     while( 1 )
@@ -40,6 +44,13 @@ void kStartWindowManager( void )
         while( kProcessEventQueueData() == TRUE )
         {
             bEventQueueResult = TRUE;
+        }
+
+        // 이벤트 큐에 이벤트를 처리했다면 윈도우 크기 변경 표식이 지워질 수 있으므로 다시 출력
+        if( ( bEventQueueResult == TRUE ) && ( pstWindowManager->bWindowResizeMode == TRUE ) )
+        {
+            // 새로운 위치에 윈도우 크기 변경 표식을 표시
+            kDrawResizeMarker( &( pstWindowManager->stResizingWindowArea ), TRUE );
         }
 
         // 처리한 데이터가 하나도 없다면 Sleep()을 수행하여 프로세서를 양보함
@@ -64,6 +75,7 @@ BOOL kProcessMouseData( void )
     WINDOWMANAGER* pstWindowManager;
     char vcTempTitle[ WINDOW_TITLEMAXLENGTH ];
     int i;
+    int iWidth, iHeight;
 
     // 윈도우 매니저를 반환
     pstWindowManager = kGetWindowManager();
@@ -157,6 +169,21 @@ BOOL kProcessMouseData( void )
                     kSetWindowEvent( qwWindowIDUnderMouse, EVENT_WINDOW_CLOSE, &stEvent );
                     kSendEventToWindow( qwWindowIDUnderMouse, &stEvent );
                 }
+                // 윈도우 크기 변경 버튼에서 눌렸으면 크기 변경 모드로 변경
+                else if( kIsInResizeButton( qwWindowIDUnderMouse, iMouseX, iMouseY ) == TRUE )
+                {
+                    // 윈도우 크기 변경 모드 설정
+                    pstWindowManager->bWindowResizeMode = TRUE;
+
+                    // 현재 윈도우를 크기 변경 윈도우로 설정
+                    pstWindowManager->qwResizingWindowID = qwWindowIDUnderMouse;
+
+                    // 현재 윈도우의 크기를 저장
+                    kGetWindowArea( qwWindowIDUnderMouse, &( pstWindowManager->stResizingWindowArea ) );
+
+                    // 윈도우 크기 변경 표식을 표시
+                    kDrawResizeMarker( &( pstWindowManager->stResizingWindowArea ), TRUE );
+                }
                 // 닫기 버튼이 아니면 윈도우 이동 모드로 변경
                 else
                 {
@@ -185,6 +212,25 @@ BOOL kProcessMouseData( void )
                 // 이동 중이라는 플래그를 해제
                 pstWindowManager->bWindowMoveMode = FALSE;
                 pstWindowManager->qwMovingWindowID = WINDOW_INVALIDID;
+            }
+            // 윈도우가 크기 변경 중이면 결정된 크기로 윈도우 크기 변경
+            else if( pstWindowManager->bWindowResizeMode == TRUE )
+            {
+                // 윈도우 매니저 자료구조에 저장된 영역을 이용하여 윈도우의 크기를 변경
+                iWidth = kGetRectangleWidth( &( pstWindowManager->stResizingWindowArea ) );
+                iHeight = kGetRectangleHeight( &( pstWindowManager->stResizingWindowArea ) );
+                kResizeWindow( pstWindowManager->qwResizingWindowID, pstWindowManager->stResizingWindowArea.iX1, pstWindowManager->stResizingWindowArea.iY1, iWidth, iHeight );
+
+                // 윈도우 크기 변경 표식 삭제
+                kDrawResizeMarker( &( pstWindowManager->stResizingWindowArea ), FALSE );
+                
+                // 윈도우로 크기 변경 이벤트 전송
+                kSetWindowEvent( pstWindowManager->qwResizingWindowID, EVENT_WINDOW_RESIZE, &stEvent );
+                kSendEventToWindow( pstWindowManager->qwResizingWindowID, &stEvent );
+
+                // 크기 변경 중이라는 플래그를 해제
+                pstWindowManager->bWindowResizeMode = FALSE;
+                pstWindowManager->qwResizingWindowID = WINDOW_INVALIDID;
             }
             // 윈도우가 이동 중이 아니면 윈도우로 왼쪽 버튼 떨어짐 이벤트를 전송
             else
@@ -236,7 +282,10 @@ BOOL kProcessMouseData( void )
         kSetMouseEvent( qwWindowIDUnderMouse, EVENT_MOUSE_MOVE, iMouseX, iMouseY, bButtonStatus, &stEvent );
         kSendEventToWindow( qwWindowIDUnderMouse, &stEvent );
     }
-
+    
+    //-----------------------------------------------------------------------------------
+    // 윈도우 이동과 크기 변경 처리
+    //-----------------------------------------------------------------------------------
     // 윈도우가 이동 중이면 윈도우 이동 처리
     if( pstWindowManager->bWindowMoveMode == TRUE )
     {
@@ -255,6 +304,29 @@ BOOL kProcessMouseData( void )
             pstWindowManager->bWindowMoveMode = FALSE;
             pstWindowManager->qwMovingWindowID = WINDOW_INVALIDID;
         }
+    }
+    // 윈도우가 크기 변경 중이면 윈도우 크기 변경 처리
+    else if( pstWindowManager->bWindowResizeMode == TRUE )
+    {
+        // 이전 위치의 윈도우 크기 변경 표식을 삭제
+        kDrawResizeMarker( &( pstWindowManager->stResizingWindowArea ), FALSE );
+
+        // 마우스 이동거리를 이용하여 새로운 윈도우 크기를 결정
+        pstWindowManager->stResizingWindowArea.iX2 += iMouseX - iPreviousMouseX;
+        pstWindowManager->stResizingWindowArea.iY1 += iMouseY - iPreviousMouseY;
+
+        // 윈도우의 크기가 최솟값 이하면 최솟값으로 다시 설정
+        if( ( pstWindowManager->stResizingWindowArea.iX2 < pstWindowManager->stResizingWindowArea.iX1 ) || ( kGetRectangleWidth( &( pstWindowManager->stResizingWindowArea ) ) < WINDOW_WIDTH_MIN ) )
+        {
+            pstWindowManager->stResizingWindowArea.iX2 = pstWindowManager->stResizingWindowArea.iX1 + WINDOW_WIDTH_MIN - 1;
+        }
+        if( ( pstWindowManager->stResizingWindowArea.iY2 < pstWindowManager->stResizingWindowArea.iY1 ) || ( kGetRectangleHeight( &( pstWindowManager->stResizingWindowArea ) ) < WINDOW_HEIGHT_MIN ) )
+        {
+            pstWindowManager->stResizingWindowArea.iY1 = pstWindowManager->stResizingWindowArea.iY2 - WINDOW_HEIGHT_MIN - 1;
+        }
+
+        // 새로운 위치에 윈도우 크기 변경 표식을 출력
+        kDrawResizeMarker( &( pstWindowManager->stResizingWindowArea ), TRUE );
     }
 
     // 다음 처리에 사용하려고 현재 버튼 상태를 저장
@@ -407,4 +479,59 @@ BOOL kProcessEventQueueData( void )
     }
 
     return TRUE;
+}
+
+//  비디오 메모리에 윈도우 크기 변경 표식을 출력하거나 출력된 표식을 삭제
+void kDrawResizeMarker( const RECT* pstArea, BOOL bShowMarker )
+{
+    RECT stMarkerArea;
+    WINDOWMANAGER* pstWindowManager;
+
+    // 윈도우 매니저를 반환
+    pstWindowManager = kGetWindowManager();
+
+    // 윈도우 크기 변경 표식을 출력하는 경우
+    if( bShowMarker == TRUE )
+    {
+        // 왼쪽 위 표식
+        kSetRectangleData( pstArea->iX1, pstArea->iY1, pstArea->iX1 + WINDOWMANAGER_RESIZEMARKERSIZE, pstArea->iY1 + WINDOWMANAGER_RESIZEMARKERSIZE, &stMarkerArea );
+        kInternalDrawRect( &( pstWindowManager->stScreenArea ), pstWindowManager->pstVideoMemory, stMarkerArea.iX1, stMarkerArea.iY1, stMarkerArea.iX2, stMarkerArea.iY1 + WINDOWMANAGER_THICK_RESIZEMARKER, WINDOWMANAGER_COLOR_RESIZEMARKER, TRUE );
+        kInternalDrawRect( &( pstWindowManager->stScreenArea ), pstWindowManager->pstVideoMemory, stMarkerArea.iX1, stMarkerArea.iY1, stMarkerArea.iX1 + WINDOWMANAGER_THICK_RESIZEMARKER, stMarkerArea.iY2, WINDOWMANAGER_COLOR_RESIZEMARKER, TRUE );
+
+        // 오른쪽 위 표식 
+        kSetRectangleData( pstArea->iX2 - WINDOWMANAGER_RESIZEMARKERSIZE, pstArea->iY1, pstArea->iX2, pstArea->iY1 + WINDOWMANAGER_RESIZEMARKERSIZE, &stMarkerArea );
+        kInternalDrawRect( &( pstWindowManager->stScreenArea ), pstWindowManager->pstVideoMemory, stMarkerArea.iX1, stMarkerArea.iY1, stMarkerArea.iX2, stMarkerArea.iY1 + WINDOWMANAGER_THICK_RESIZEMARKER, WINDOWMANAGER_COLOR_RESIZEMARKER, TRUE );
+        kInternalDrawRect( &( pstWindowManager->stScreenArea ), pstWindowManager->pstVideoMemory, stMarkerArea.iX2 - WINDOWMANAGER_THICK_RESIZEMARKER, stMarkerArea.iY1, stMarkerArea.iX2, stMarkerArea.iY2, WINDOWMANAGER_COLOR_RESIZEMARKER, TRUE );
+
+        // 왼쪽 아래 표식
+        kSetRectangleData( pstArea->iX1, pstArea->iY2 - WINDOWMANAGER_RESIZEMARKERSIZE, pstArea->iX1 + WINDOWMANAGER_RESIZEMARKERSIZE, pstArea->iY2, &stMarkerArea );
+        kInternalDrawRect( &( pstWindowManager->stScreenArea ), pstWindowManager->pstVideoMemory, stMarkerArea.iX1, stMarkerArea.iY2 - WINDOWMANAGER_THICK_RESIZEMARKER, stMarkerArea.iX2, stMarkerArea.iY2, WINDOWMANAGER_COLOR_RESIZEMARKER, TRUE );
+        kInternalDrawRect( &( pstWindowManager->stScreenArea ), pstWindowManager->pstVideoMemory, stMarkerArea.iX1, stMarkerArea.iY1, stMarkerArea.iX1 + WINDOWMANAGER_THICK_RESIZEMARKER, stMarkerArea.iY2, WINDOWMANAGER_COLOR_RESIZEMARKER, TRUE );
+
+        // 오른쪽 아래 표식
+        kSetRectangleData( pstArea->iX2 - WINDOWMANAGER_RESIZEMARKERSIZE, pstArea->iY2 - WINDOWMANAGER_RESIZEMARKERSIZE, pstArea->iX2, pstArea->iY2, &stMarkerArea );
+        kInternalDrawRect( &( pstWindowManager->stScreenArea ), pstWindowManager->pstVideoMemory, stMarkerArea.iX1, stMarkerArea.iY2 - WINDOWMANAGER_THICK_RESIZEMARKER, stMarkerArea.iX2, stMarkerArea.iY2, WINDOWMANAGER_COLOR_RESIZEMARKER, TRUE );
+        kInternalDrawRect( &( pstWindowManager->stScreenArea ), pstWindowManager->pstVideoMemory, stMarkerArea.iX2 - WINDOWMANAGER_THICK_RESIZEMARKER, stMarkerArea.iY1, stMarkerArea.iX2, stMarkerArea.iY2, WINDOWMANAGER_COLOR_RESIZEMARKER, TRUE );
+    }
+    // 윈도우 크기 변경 표식을 삭제하는 경우
+    else
+    {
+        // 크기 변경 표식은 영역의 네 모서리에 있으므로 모서리만 화면 업데이트
+        // 왼쪽 위 표식
+        kSetRectangleData( pstArea->iX1, pstArea->iY1, pstArea->iX1 + WINDOWMANAGER_RESIZEMARKERSIZE, pstArea->iY1 + WINDOWMANAGER_RESIZEMARKERSIZE, &stMarkerArea );
+        kRedrawWindowByArea( &stMarkerArea, WINDOW_INVALIDID );
+
+        // 오른쪽 위 표식
+        kSetRectangleData( pstArea->iX2 - WINDOWMANAGER_RESIZEMARKERSIZE, pstArea->iY1, pstArea->iX2, pstArea->iY1 + WINDOWMANAGER_RESIZEMARKERSIZE, &stMarkerArea );
+        kRedrawWindowByArea( &stMarkerArea, WINDOW_INVALIDID );
+
+        // 왼쪽 아래 표식
+        kSetRectangleData( pstArea->iX1, pstArea->iY2 - WINDOWMANAGER_RESIZEMARKERSIZE, pstArea->iX1 + WINDOWMANAGER_RESIZEMARKERSIZE, pstArea->iY2, &stMarkerArea );
+        kRedrawWindowByArea( &stMarkerArea, WINDOW_INVALIDID );
+
+        // 오른쪽 아래 표식
+        kSetRectangleData( pstArea->iX2 - WINDOWMANAGER_RESIZEMARKERSIZE, pstArea->iY2 - WINDOWMANAGER_RESIZEMARKERSIZE, pstArea->iX2, pstArea->iY2, &stMarkerArea );
+
+        kRedrawWindowByArea( &stMarkerArea, WINDOW_INVALIDID );
+    }
 }
