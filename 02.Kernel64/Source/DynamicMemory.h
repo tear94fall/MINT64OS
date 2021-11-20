@@ -5,8 +5,10 @@
 #include "Synchronization.h"
 
 // 매크로
-// 동적 메모리 영억의 시작 어드레스, 1MB 단위로 정렬
-#define DYNAMICMEMORY_START_ADDRESS     ( ( TASK_STACKPOOLADDRESS + ( TASK_STACKSIZE * TASK_MAXCOUNT ) + 0xfffff ) & 0xfffffffffff00000 )
+// 동적 메모리 영억의 시작 어드레스, 2MB 단위로 정렬
+// 더 이상 커널 영역에 스택 영역을 할당하지 않으므로 커널 스택 풀이 시작하던 위치부터
+// 동적 메모리 영역의 시작 어드레스
+#define DYNAMICMEMORY_START_ADDRESS     ( ( TASK_STACKPOOLADDRESS + 0x1fffff ) & 0xffe00000 )
 // 버디 블록의 최소 크기, 1KB
 #define DYNAMICMEMORY_MIN_SIZE          ( 1 * 1024 )
 

@@ -1,4 +1,9 @@
 #include "Page.h"
+#include "../../02.Kernel64/Source/Task.h"
+
+// 02.Kernel64/Source/DynamicMemory.h에 있는 동적 메모리 영역의 시작 위치를 옮겨옴
+// 동적 메모리의 시작 위치가 수정되면 여기도 수정해야 함
+#define DYNAMICMEMORY_START_ADDRESS     ( ( TASK_STACKPOOLADDRESS + 0x1fffff ) & 0xffe00000 )
 
 //  IA-32e 모드 커널을 위한 페이지 테이블 생성
 void kInitializePageTables( void )
@@ -7,13 +12,14 @@ void kInitializePageTables( void )
     PDPTENTRY* pstPDPTEntry;
     PDENTRY* pstPDEntry;
     DWORD dwMappingAddress;
+    DWORD dwPageEntryFlags;
     int i;
 
     // PML4 테이블 생성
     // 첫 번째 엔트리 외에 나머지는 모두 0으로 초기화
     pstPML4TEntry = ( PML4TENTRY* ) 0x100000;
-    kSetPageEntryData( &( pstPML4TEntry[ 0 ] ), 0x00, 0x101000, PAGE_FLAGS_DEFAULT, 0 );
-    for ( i = 1 ; i <PAGE_MAXENTRYCOUNT ; i++ )
+    kSetPageEntryData( &( pstPML4TEntry[ 0 ] ), 0x00, 0x101000, PAGE_FLAGS_DEFAULT | PAGE_FLAGS_US, 0 );
+    for ( i = 1 ; i < PAGE_MAXENTRYCOUNT ; i++ )
     {
         kSetPageEntryData( &( pstPML4TEntry[ i ] ), 0, 0, 0, 0 );
     }
@@ -24,7 +30,7 @@ void kInitializePageTables( void )
     pstPDPTEntry = ( PDPTENTRY* ) 0x101000;
     for ( i = 0 ; i < 64 ; i ++ )
     {
-        kSetPageEntryData( &( pstPDPTEntry[ i ] ), 0, 0x102000 + ( i * PAGE_TABLESIZE ), PAGE_FLAGS_DEFAULT, 0 );
+        kSetPageEntryData( &( pstPDPTEntry[ i ] ), 0, 0x102000 + ( i * PAGE_TABLESIZE ), PAGE_FLAGS_DEFAULT | PAGE_FLAGS_US, 0 );
     }
 
     for ( i = 64 ; i < PAGE_MAXENTRYCOUNT ; i++ )
@@ -39,10 +45,21 @@ void kInitializePageTables( void )
     dwMappingAddress = 0;
     for ( i = 0 ; i < PAGE_MAXENTRYCOUNT * 64 ; i ++ )
     {
+        // 영역에 따라 페이지 엔트리의 속성을 설정
+        // 동적 메모리 영역이 시작하는 영역까지는 커널 영역이므로 페이지 속성을
+        // 관리자로 설정하고 그 이상은 유저로 설정
+        if( i < ( ( DWORD ) DYNAMICMEMORY_START_ADDRESS / PAGE_DEFAULTSIZE ) )
+        {
+            dwPageEntryFlags = PAGE_FLAGS_DEFAULT | PAGE_FLAGS_PS;
+        }
+        else
+        {
+            dwPageEntryFlags = PAGE_FLAGS_DEFAULT | PAGE_FLAGS_PS | PAGE_FLAGS_US;
+        }
+
         // 32비트로는 상위 어드레스를 표현할 수 없으므로, MB 단위로 계산한 다음
         // 최종 결과를 다시 4KB로 나누어 32비트 이상의 어드레스를 계산함
-        kSetPageEntryData( &( pstPDEntry[ i ] ), ( i * ( PAGE_DEFAULTSIZE >> 20 ) ) >> 12,
-                dwMappingAddress, PAGE_FLAGS_DEFAULT | PAGE_FLAGS_PS, 0 );
+        kSetPageEntryData( &( pstPDEntry[ i ] ), ( i * ( PAGE_DEFAULTSIZE >> 20 ) ) >> 12, dwMappingAddress, dwPageEntryFlags, 0 );
         dwMappingAddress += PAGE_DEFAULTSIZE;
     }
 }

@@ -24,10 +24,14 @@ void kInitializeGDTTableAndTSS( void )
     // TSS 세그먼트 영역 설정, GDT 테이블의 뒤쪽에 위치
     pstTSS = ( TSSSEGMENT* ) ( ( QWORD ) pstEntry + GDT_TABLESIZE );
 
-    // NULL, 64비트 Code/Data, TSS를 위해 총 3 + 16개의 세그먼트를 생성
+    // NULL, 커널 코드/데이터, 유저 코드/데이터, TSS를 위해 총 5 + 16 개의 세그먼트를 생성
     kSetGDTEntry8( &( pstEntry[ 0 ] ), 0, 0, 0, 0, 0 );
+    // 커널 레벨 코드/데이터 디스크립터 생성
     kSetGDTEntry8( &( pstEntry[ 1 ] ), 0, 0xFFFFF, GDT_FLAGS_UPPER_CODE, GDT_FLAGS_LOWER_KERNELCODE, GDT_TYPE_CODE );
     kSetGDTEntry8( &( pstEntry[ 2 ] ), 0, 0xFFFFF, GDT_FLAGS_UPPER_DATA, GDT_FLAGS_LOWER_KERNELDATA, GDT_TYPE_DATA );
+    // 유저 레벨 코드/데이터 디스크립터 생성
+    kSetGDTEntry8( &( pstEntry[ 3 ] ), 0, 0xFFFFF, GDT_FLAGS_UPPER_DATA, GDT_FLAGS_LOWER_USERDATA, GDT_TYPE_DATA );
+    kSetGDTEntry8( &( pstEntry[ 4 ] ), 0, 0xFFFFF, GDT_FLAGS_UPPER_CODE, GDT_FLAGS_LOWER_USERCODE, GDT_TYPE_CODE );
 
     // 16개 코어 지원을 위해 16개의 TSS 디스크립터를 생성
     for( i = 0 ; i < MAXPROCESSORCOUNT ; i++ )

@@ -91,7 +91,7 @@ Synchronization.o: ../Source/Synchronization.c \
  ../Source/AssemblyUtility.h
 Task.o: ../Source/Task.c ../Source/Task.h ../Source/Types.h \
  ../Source/List.h ../Source/Synchronization.h ../Source/Descriptor.h \
- ../Source/MultiProcessor.h
+ ../Source/MultiProcessor.h ../Source/DynamicMemory.h
 Utility.o: ../Source/Utility.c ../Source/Utility.h ../Source/Types.h \
  ../Source/VBE.h ../Source/AssemblyUtility.h ../Source/Task.h \
  ../Source/List.h ../Source/Synchronization.h

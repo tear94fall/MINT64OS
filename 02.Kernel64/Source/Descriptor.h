@@ -22,12 +22,15 @@
 #define GDT_FLAGS_UPPER_G       0x80
 
 // 실제로 사용할 매크로
-// Lower Flags는 Code/Data/TSS, DPL0, Present로 설정
+// Lower Flags는 Code/Data/TSS, DPL0/3, Present로 설정
+// 커널 레벨 코드/데이터 세그먼트 디스크립터
 #define GDT_FLAGS_LOWER_KERNELCODE ( GDT_TYPE_CODE | GDT_FLAGS_LOWER_S | GDT_FLAGS_LOWER_DPL0 | GDT_FLAGS_LOWER_P )
 #define GDT_FLAGS_LOWER_KERNELDATA ( GDT_TYPE_DATA | GDT_FLAGS_LOWER_S | GDT_FLAGS_LOWER_DPL0 | GDT_FLAGS_LOWER_P )
-#define GDT_FLAGS_LOWER_TSS ( GDT_FLAGS_LOWER_DPL0 | GDT_FLAGS_LOWER_P )
+// 유저 레벨 코드/데이터 세그먼트 디스크립터
 #define GDT_FLAGS_LOWER_USERCODE ( GDT_TYPE_CODE | GDT_FLAGS_LOWER_S | GDT_FLAGS_LOWER_DPL3 | GDT_FLAGS_LOWER_P )
 #define GDT_FLAGS_LOWER_USERDATA ( GDT_TYPE_DATA | GDT_FLAGS_LOWER_S | GDT_FLAGS_LOWER_DPL3 | GDT_FLAGS_LOWER_P )
+// TSS 세그먼트 디스크립터
+#define GDT_FLAGS_LOWER_TSS ( GDT_FLAGS_LOWER_DPL0 | GDT_FLAGS_LOWER_P )
 
 // Upper FLags는 Granulaty로 설정하고 코드 및 데이터는 64비트 추가
 #define GDT_FLAGS_UPPER_CODE ( GDT_FLAGS_UPPER_G | GDT_FLAGS_UPPER_L )
@@ -37,13 +40,19 @@
 // 세그먼트 디스크립터 오프셋
 #define GDT_KERNELCODESEGMENT   0x08
 #define GDT_KERNELDATASEGMENT   0x10
-#define GDT_TSSSEGMENT          0x18
+#define GDT_USERDATASEGMENT     0x18
+#define GDT_USERCODESEGMENT     0x20
+#define GDT_TSSSEGMENT          0x28
+
+// 세그먼트 셀렉터에 설정할 RPL
+#define SELECTOR_RPL_0          0x00
+#define SELECTOR_RPL_3          0x03
 
 // 기타 GDT에 관련된 매크로
 // GDTR의 시작 어드레스, 1MB에서 264KB 까지는 페이지 테이블 영역
 #define GDTR_STARTADDRESS   0x142000
-// 8바이트 엔트리의 개수, 널 디스크립터/커널 코드/커널 데이터
-#define GDT_MAXENTRY8COUNT  3
+// 8바이트 엔트리의 개수, 널 디스크립터, 커널 코드/데이터, 유저 코드/데이터
+#define GDT_MAXENTRY8COUNT  5
 // 16바이트 엔트리의 개수, TSS
 #define GDT_MAXENTRY16COUNT ( MAXPROCESSORCOUNT )
 // GDT 테이블의 크기
