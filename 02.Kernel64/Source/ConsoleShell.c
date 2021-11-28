@@ -17,6 +17,7 @@
 #include "IOAPIC.h"
 #include "InterruptHandler.h"
 #include "VBE.h"
+#include "SystemCall.h"
 
 // 커맨드 테이블 정의
 SHELLCOMMANDENTRY gs_vstCommandTable[] =
@@ -51,6 +52,7 @@ SHELLCOMMANDENTRY gs_vstCommandTable[] =
     { "showintproccount", "Show Interrupt Processing Count", kShowInterruptProcessingCount },
     { "changeaffinity", "Change Task Affinity, ex)changeaffinity 1(ID) 0xFF(Affinity)", kChangeTaskAffinity },
     { "vbemodeinfo", "Show VBE Mode Information", kShowVBEModeInfo },
+    { "testsystemcall", "Test System Call Operation", kTestSystemCall },
 };
 
 //==============================================================================
@@ -1480,4 +1482,23 @@ static void kShowVBEModeInfo( const char* pcParameterBuffer )
     kPrintf( "Linear Red Mask Size: %d, Field Position: %d\n", pstModeInfo->bLinearRedMaskSize, pstModeInfo->bLinearRedFieldPosition );
     kPrintf( "Linear Green Mask Size: %d, Field Position: %d\n", pstModeInfo->bLinearGreenMaskSize, pstModeInfo->bLinearGreenFieldPosition );
     kPrintf( "Linear Blue Mask Size: %d, Field Position: %d\n", pstModeInfo->bLinearBlueMaskSize, pstModeInfo->bLinearBlueFieldPosition );
+}
+
+//  시스템 콜을 테스트하는 유저 레벨 태스크를 설정
+static void kTestSystemCall( const char* pcParameterBuffer )
+{
+    BYTE* pbUserMemory;
+
+    // 동적 할당 영역에 4Kbyte 메모리를 할당받아 유저 레벨 태스크를 생성할 준비를 함
+    pbUserMemory = kAllocateMemory( 0x1000 );
+    if( pbUserMemory == NULL )
+    {
+        return ;
+    }
+
+    // 유저 레벨 태스크로 사용할 kSystemCallTestTask() 함수의 코드를 할당받은 메모리에 복사
+    kMemCpy( pbUserMemory, kSystemCallTestTask, 0x1000 );
+
+    // 유저 레벨 프로세스로 생성
+    kCreateTask( TASK_FLAGS_USERLEVEL | TASK_FLAGS_PROCESS, pbUserMemory, 0x1000, ( QWORD ) pbUserMemory, TASK_LOADBALANCINGID );
 }

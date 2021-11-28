@@ -10,6 +10,7 @@ global kReadTSC
 global kSwitchContext, kHlt, kTestAndSet, kPause
 global kInitializeFPU, kSaveFPUContext, kLoadFPUContext, kSetTS, kClearTS
 global kEnableGlobalLocalAPIC
+global kReadMSR, kWriteMSR
 
 ; 포트로부터 1바이트를 읽음
 ;   PARAM: 포트 번호
@@ -120,6 +121,47 @@ kReadTSC:
 
     pop rdx
     ret
+
+; MSR 레지스터에서 값을 읽음
+;   PARAM: QWORD qwMSRAddress, QWORD* pqwRDX, QWORD* pqwRAX
+kReadMSR:
+    push rdx            ; RDX 레지스터부터 RBX 레지스터까지 값을 스택에 보관
+    push rax
+    push rcx
+    push rbx
+
+    mov rbx, rdx        ; 세 번째 파라미터의 pqwRAX 값을 RBX 레지스터에 임시로 보관
+
+    mov rcx, rdi        ; 첫 번째 파라미터에 저장된 MSR 어드레스를 RCX 레지스터에 저장
+    rdmsr               ; RCX 레지스터에 저장된 MSR의 값을 읽어서 RDX 레지스터(상위 32비트)와
+                        ; RAX 레지스터(하위 32비트)에 나누어 저장
+
+    mov qword[ rsi ], rdx   ; 두 번째 파라미터의 pqwRDX에 RDX 레지스터에 값을 저장
+    mov qword[ rbx ], rax   ; 세 번째 파라미터의 pqwRAX에 RAX 레지스터에 값을 저장
+
+    pop rbx             ; RDX 레지스터부터 RBX 레지스터까지 값을 스택에서 복원
+    pop rcx
+    pop rax
+    pop rdx
+    ret                 ; 함수를 호출한 다음 코드의 위치로 복귀
+
+; MSR 레지스터에 값을 씀
+;   PARAM: QWORD qwMSRAddress, QWORD qwRDX, QWORD qwRAX
+kWriteMSR:
+    push rdx            ; RDX 레지스터부터 RCX 레지스터까지 값을 스택에 보관
+    push rax
+    push rcx
+
+    mov rcx, rdi        ; 첫 번째 파라미터의 MSR 어드레스를 RCX 레지스터에 저장
+    mov rax, rdx        ; 세 번째 파라미터의 qwRAX 값을 RAX 레지스터에 저장
+    mov rdx, rsi        ; 두 번째 파라미터의 qwRDX 값을 RDX 레지스터에 저장
+    wrmsr               ; RCX 레지스터에 저장된 MSR에 RDX 레지스터(상위 32비트)와
+                        ; RAX 레지스터(하위 32비트)를 저장
+    
+    pop rcx             ; RDX 레지스터부터 RCX 레지스터까지 값을 스택에서 복원
+    pop rax
+    pop rdx
+    ret                 ; 함수를 호출한 다음 코드의 위치로 복귀
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;   태스크 관련 어셈블리어 함수

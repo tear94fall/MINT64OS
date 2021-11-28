@@ -15,6 +15,7 @@
 #include "2DGraphics.h"
 #include "MPConfigurationTable.h"
 #include "WindowManagerTask.h"
+#include "SystemCall.h"
 
 // Application Processor를 위한 Main 함수
 void MainForApplicationProcessor( void );
@@ -155,6 +156,11 @@ void Main( void )
         kPrintf( "Fail\n" );
     }
 
+    // 시스템 콜에 관련된 MSR을 초기화
+    kPrintf( "System Call MSR Initialize..................[Pass]\n" );
+    iCursorY++;
+    kInitializeSystemCall();
+
     // 유휴 태스크를 시스템 스레드로 생성하고 쉘을 시작
     kCreateTask( TASK_FLAGS_LOWEST | TASK_FLAGS_THREAD | TASK_FLAGS_SYSTEM | TASK_FLAGS_IDLE, 0, 0, ( QWORD ) kIdleTask, kGetAPICID() );
     
@@ -200,6 +206,9 @@ void MainForApplicationProcessor( void )
 
     // 인터럽트를 활성화
     kEnableInterrupt();
+
+    // 시스템 콜에 관련된 MSR을 초기화
+    kInitializeSystemCall();
     
     // 대칭 I/O 모드 테스트를 위해 Application Processor가 시작한 후 한 번만 출력
     // kPrintf( "Application Processor[APIC ID: %d] Is Activated\n", kGetAPICID() );

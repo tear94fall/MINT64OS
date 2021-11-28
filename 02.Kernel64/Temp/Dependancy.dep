@@ -19,7 +19,7 @@ ConsoleShell.o: ../Source/ConsoleShell.c ../Source/ConsoleShell.h \
  ../Source/CacheManager.h ../Source/SerialPort.h \
  ../Source/MPConfigurationTable.h ../Source/LocalAPIC.h \
  ../Source/MultiProcessor.h ../Source/IOAPIC.h \
- ../Source/InterruptHandler.h
+ ../Source/InterruptHandler.h ../Source/SystemCall.h
 Descriptor.o: ../Source/Descriptor.c ../Source/Descriptor.h \
  ../Source/Types.h ../Source/Utility.h ../Source/VBE.h ../Source/ISR.h \
  ../Source/MultiProcessor.h
@@ -67,7 +67,8 @@ Main.o: ../Source/Main.c ../Source/Types.h ../Source/Keyboard.h \
  ../Source/DynamicMemory.h ../Source/HardDisk.h ../Source/FileSystem.h \
  ../Source/CacheManager.h ../Source/SerialPort.h \
  ../Source/MultiProcessor.h ../Source/VBE.h ../Source/2DGraphics.h \
- ../Source/MPConfigurationTable.h ../Source/WindowManagerTask.h
+ ../Source/MPConfigurationTable.h ../Source/WindowManagerTask.h \
+ ../Source/SystemCall.h
 Mouse.o: ../Source/Mouse.c ../Source/Mouse.h ../Source/Types.h \
  ../Source/Synchronization.h ../Source/Keyboard.h ../Source/Queue.h \
  ../Source/AssemblyUtility.h ../Source/Task.h ../Source/List.h
@@ -89,6 +90,14 @@ Synchronization.o: ../Source/Synchronization.c \
  ../Source/Synchronization.h ../Source/Types.h ../Source/Utility.h \
  ../Source/VBE.h ../Source/Task.h ../Source/List.h \
  ../Source/AssemblyUtility.h
+SystemCall.o: ../Source/SystemCall.c ../Source/Types.h \
+ ../Source/SystemCall.h ../Source/AssemblyUtility.h ../Source/Task.h \
+ ../Source/List.h ../Source/Synchronization.h ../Source/Descriptor.h \
+ ../Source/SystemCallList.h ../Source/FileSystem.h ../Source/HardDisk.h \
+ ../Source/CacheManager.h ../Source/DynamicMemory.h ../Source/RTC.h \
+ ../Source/Utility.h ../Source/VBE.h ../Source/Window.h \
+ ../Source/2DGraphics.h ../Source/Queue.h ../Source/Keyboard.h \
+ ../Source/JPEG.h
 Task.o: ../Source/Task.c ../Source/Task.h ../Source/Types.h \
  ../Source/List.h ../Source/Synchronization.h ../Source/Descriptor.h \
  ../Source/MultiProcessor.h ../Source/DynamicMemory.h

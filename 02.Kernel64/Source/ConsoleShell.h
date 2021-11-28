@@ -76,5 +76,6 @@ static void kShowIRQINTINMappingTable( const char* pcParameterBuffer );
 static void kShowInterruptProcessingCount( const char* pcParameterBuffer );
 static void kChangeTaskAffinity( const char* pcParameterBuffer );
 static void kShowVBEModeInfo( const char* pcParameterBuffer );
+static void kTestSystemCall( const char* pcParameterBuffer );
 
 #endif /*__CONSOLESHELL_H__*/
