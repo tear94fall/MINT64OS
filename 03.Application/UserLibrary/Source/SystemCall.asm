@@ -3,7 +3,24 @@
 SECTION .text           ; text 섹션(세그먼트)을 정의
 
 ; C언어에서 호출할 수 있도록 이름을 노출(Export)
-global ExecuteSystemCall
+global _START, ExecuteSystemCall
+
+; 외부에서 정의된 함수를 쓸 수 잇도록 선언(Import)
+extern Main, exit
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;   코드 영역
+;       응용프로그램이 로딩되었을 때 실제로 실행을 시작할 엔트리 포인트
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+_START:
+    call Main           ; C 언어 엔트리 포인트 함수(Main) 호출
+
+    mov rdi, rax        ; 파라미터에 Main 함수의 반환 값(RAX 레지스터)을 저장
+    call exit           ; 프로세스 종료 함수를 호출
+
+    jmp $               ; 위에서 프로세스가 종료되므로 여기는 실행되지 않음
+
+    ret
 
 ; 시스템 콜을 실행
 ;   PARAM: QWORD qwServiceNumber, PARAMETERTABLE* pstParameter
