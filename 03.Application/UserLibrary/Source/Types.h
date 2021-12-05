@@ -95,7 +95,7 @@
 #define GETTCBOFFSET( x )               ( ( x ) & 0xFFFFFFFF )
 
 // 유효하지 않은 태스크 ID
-#define TASK_INVALID                    0xFFFFFFFFFFFFFFFF
+#define TASK_INVALIDID                  0xFFFFFFFFFFFFFFFF
 
 // 프로세서 친화도 필드에 아래의 값이 설정되면 해당 태스크는 특별한 요구사항이 없는 것으로
 // 판단하고 태스크 부하 분산 수행

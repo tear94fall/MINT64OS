@@ -19,7 +19,7 @@ ConsoleShell.o: ../Source/ConsoleShell.c ../Source/ConsoleShell.h \
  ../Source/CacheManager.h ../Source/SerialPort.h \
  ../Source/MPConfigurationTable.h ../Source/LocalAPIC.h \
  ../Source/MultiProcessor.h ../Source/IOAPIC.h \
- ../Source/InterruptHandler.h ../Source/SystemCall.h
+ ../Source/InterruptHandler.h ../Source/SystemCall.h ../Source/Loader.h
 Descriptor.o: ../Source/Descriptor.c ../Source/Descriptor.h \
  ../Source/Types.h ../Source/Utility.h ../Source/VBE.h ../Source/ISR.h \
  ../Source/MultiProcessor.h
@@ -55,6 +55,10 @@ Keyboard.o: ../Source/Keyboard.c ../Source/Types.h \
  ../Source/AssemblyUtility.h ../Source/Task.h ../Source/List.h \
  ../Source/Synchronization.h ../Source/Keyboard.h ../Source/Queue.h
 List.o: ../Source/List.c ../Source/List.h ../Source/Types.h
+Loader.o: ../Source/Loader.c ../Source/Loader.h ../Source/Types.h \
+ ../Source/Task.h ../Source/List.h ../Source/Synchronization.h \
+ ../Source/FileSystem.h ../Source/HardDisk.h ../Source/CacheManager.h \
+ ../Source/DynamicMemory.h
 LocalAPIC.o: ../Source/LocalAPIC.c ../Source/LocalAPIC.h \
  ../Source/Types.h ../Source/MPConfigurationTable.h
 MPConfigurationTable.o: ../Source/MPConfigurationTable.c \
@@ -97,7 +101,7 @@ SystemCall.o: ../Source/SystemCall.c ../Source/Types.h \
  ../Source/CacheManager.h ../Source/DynamicMemory.h ../Source/RTC.h \
  ../Source/Utility.h ../Source/VBE.h ../Source/Window.h \
  ../Source/2DGraphics.h ../Source/Queue.h ../Source/Keyboard.h \
- ../Source/JPEG.h
+ ../Source/JPEG.h ../Source/Loader.h
 Task.o: ../Source/Task.c ../Source/Task.h ../Source/Types.h \
  ../Source/List.h ../Source/Synchronization.h ../Source/Descriptor.h \
  ../Source/MultiProcessor.h ../Source/DynamicMemory.h

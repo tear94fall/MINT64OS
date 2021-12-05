@@ -381,6 +381,36 @@ BOOL ChangeProcessorAffinity( QWORD qwTaskID, BYTE bAffinity )
     return ( BOOL ) ExecuteSystemCall( SYSCALL_CHANGEPROCESSORAFFINITY, &stParameter );
 }
 
+//  응용프로그램 생성 
+QWORD ExecuteProgram( const char* pcFileName, const char* pcArgumentString, BYTE bAffinity )
+{
+    PARAMETERTABLE stParameter;
+
+    // 파라미터 삽입
+    PARAM( 0 ) = ( QWORD ) pcFileName;
+    PARAM( 1 ) = ( QWORD ) pcArgumentString;
+    PARAM( 2 ) = ( QWORD ) bAffinity;
+
+    // 시스템 콜 호출
+    return ExecuteSystemCall( SYSCALL_EXECUTEPROGRAM, &stParameter );
+}
+
+//  스레드 생성
+QWORD CreateThread( QWORD qwEntryPoint, QWORD qwArgument, BYTE bAffinity )
+{
+    PARAMETERTABLE stParameter;
+
+    // 파라미터 삽입
+    PARAM( 0 ) = ( QWORD ) qwEntryPoint;
+    PARAM( 1 ) = ( QWORD ) qwArgument;
+    PARAM( 2 ) = ( QWORD ) bAffinity;
+    // 종료할 때 호출되는 함수에 exit를 지정하여 스레드가 스스로 종료되도록 함
+    PARAM( 3 ) = ( QWORD ) exit;
+
+    // 시스템 콜 호출
+    return ExecuteSystemCall( SYSCALL_EXECUTEPROGRAM, &stParameter );
+}
+
 //==============================================================================
 // GUI 시스템 관련
 //==============================================================================

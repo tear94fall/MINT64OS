@@ -10,6 +10,7 @@
 #include "Utility.h"
 #include "Window.h"
 #include "JPEG.h"
+#include "Loader.h"
 
 //  시스템 콜을 호출할 수 있도록 초기화
 void kInitializeSystemCall( void )
@@ -127,6 +128,10 @@ QWORD kProcessSystemCall( QWORD qwServiceNumber, PARAMETERTABLE* pstParameter )
         return kGetProcessorLoad( PARAM( 0 ) );
     case SYSCALL_CHANGEPROCESSORAFFINITY:
         return kChangePriority( PARAM( 0 ), PARAM( 1 ) );
+    case SYSCALL_EXECUTEPROGRAM:
+        return kExecuteProgram( ( char* ) PARAM( 0 ), ( char* ) PARAM( 1 ), ( BYTE ) PARAM( 2 ) );
+    case SYSCALL_CREATETHREAD:
+        return kCreateThread( PARAM( 0 ), PARAM( 1 ), ( BYTE ) PARAM( 2 ), PARAM( 3 ) );
 
         //==============================================================================
         // GUI 시스템 관련
