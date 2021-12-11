@@ -1,5 +1,5 @@
 # 기본적으로 빌드를 수행할 목록
-all: MINT64OSLibrary HelloWorld TextViewer
+all: MINT64OSLibrary HelloWorld TextViewer Shooter
 
 # 라이브러리 빌드를 위해 UserLibrary 디렉토리에서 make 실행
 MINT64OSLibrary:
@@ -37,8 +37,21 @@ TextViewer:
 	@echo =================== Build Complete ===================
 	@echo
 
+# 버블 슈터 빌드를 위해 Shooter 디렉토리에서 make 실행
+Shooter:
+	@echo
+	@echo =================== Build Shooter ===================
+	@echo
+
+	make -C 02.Shooter
+
+	@echo
+	@echo =================== Build Complete ===================
+	@echo
+
 # 소스 파일을 제외한 나머지 파일 정리
 clean:
 	make -C UserLibrary clean
 	make -C 00.HelloWorld clean
 	make -C 01.TextViewer clean
+	make -C 02.Shooter clean
