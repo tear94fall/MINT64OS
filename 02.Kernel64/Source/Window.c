@@ -254,7 +254,7 @@ QWORD kCreateWindow( int iX, int iY, int iWidth, int iHeight, DWORD dwFlags, con
 
         if( iHeight < WINDOW_HEIGHT_MIN )
         {
-            iHeight = WINDOW_WIDTH_MIN;
+            iHeight = WINDOW_HEIGHT_MIN;
         }
     }
 

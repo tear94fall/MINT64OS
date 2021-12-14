@@ -1074,7 +1074,7 @@ DWORD kReadFile( void* pvBuffer, DWORD dwSize, DWORD dwCount, FILE* pstFile )
     kUnlock( &( gs_stFileSystemManager.stMutex ) );
 
     // 읽은 바이트 수를 반환
-    return dwReadCount;
+    return ( dwReadCount / dwSize );
 }
 
 //  루트 디렉터리에서 디렉터리 엔트리 값을 갱신

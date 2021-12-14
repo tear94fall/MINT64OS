@@ -38,6 +38,7 @@ GUITask.o: ../Source/GUITask.c ../Source/GUITask.h ../Source/Types.h \
  ../Source/Task.h ../Source/ConsoleShell.h ../Source/FileSystem.h \
  ../Source/HardDisk.h ../Source/CacheManager.h ../Source/JPEG.h \
  ../Source/DynamicMemory.h
+HangulFont.o: ../Source/HangulFont.c
 HardDisk.o: ../Source/HardDisk.c ../Source/HardDisk.h ../Source/Types.h \
  ../Source/Synchronization.h
 IOAPIC.o: ../Source/IOAPIC.c ../Source/IOAPIC.h ../Source/Types.h \

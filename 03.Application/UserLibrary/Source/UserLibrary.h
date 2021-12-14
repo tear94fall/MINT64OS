@@ -35,7 +35,7 @@ int GetRectangleWidth( const RECT* pstArea );
 int GetRectangleHeight( const RECT* pstArea );
 BOOL GetOverlappedRectangle( const RECT* pstArea1, const RECT* pstArea2, RECT* pstIntersection );
 BOOL ConvertPointScreenToClient( QWORD qwWindowID, const POINT* pstXY, POINT* pstXYInWindow );
-BOOL ConvertPointClientToScreen( QWORD qwWindowID, const POINT* pstXy, POINT* pstXYInScreen );
+BOOL ConvertPointClientToScreen( QWORD qwWindowID, const POINT* pstXY, POINT* pstXYInScreen );
 BOOL ConvertRectScreenToClient( QWORD qwWindowID, const RECT* pstArea, RECT* pstAreaInWindow );
 BOOL ConvertRectClientToScreen( QWORD qwWindowID, const RECT* pstArea, RECT* pstAreaInScreen );
 void SetRectangleData( int iX1, int iY1, int iX2, int iY2, RECT* pstRect );
