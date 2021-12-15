@@ -1,6 +1,8 @@
 #include "MINTOSLibrary.h"
 #include "Main.h"
 
+// 컴파일시에 한글의 인코딩이 ECU-KR이 아니라면 변환 하여 컴파일 해야 한글 입출력이 가능함
+
 //  응용프로그램의 C 언어 엔트리 포인트
 int Main( char* pcArgument )
 {

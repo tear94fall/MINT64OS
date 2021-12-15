@@ -1,5 +1,5 @@
 # 기본적으로 빌드를 수행할 목록
-all: MINT64OSLibrary HelloWorld TextViewer Shooter Hexa HangulViewer
+all: MINT64OSLibrary HelloWorld TextViewer Shooter Hexa HangulViewer OneLineMemo
 
 # 라이브러리 빌드를 위해 UserLibrary 디렉토리에서 make 실행
 MINT64OSLibrary:
@@ -73,6 +73,18 @@ HangulViewer:
 	@echo =================== Build Complete ===================
 	@echo
 
+# 한 줄 메모장 빌드를 위해 OneLineMemo 디렉토리에서 make 실행
+OneLineMemo:
+	@echo
+	@echo =================== Build OneLineMemo ===================
+	@echo
+
+	make -C 05.OneLineMemo
+
+	@echo
+	@echo =================== Build Complete ===================
+	@echo
+
 # 소스 파일을 제외한 나머지 파일 정리
 clean:
 	make -C UserLibrary clean
@@ -81,3 +93,4 @@ clean:
 	make -C 02.Shooter clean
 	make -C 03.Hexa clean
 	make -C 04.HangulViewer clean
+	make -C 05.OneLineMemo clean
