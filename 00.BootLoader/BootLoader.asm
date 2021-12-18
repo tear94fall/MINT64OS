@@ -29,6 +29,8 @@ START:
 	mov sp, 0xFFFE	; SP 레지스터의 어드레스를 0xFFFE로 설정
 	mov bp, 0xFFFE	; BP 레지스터의 어드레스를 0xFFFE로 설정
 
+	mov byte[ BOOTDRIVE ], dl		; 부팅한 드라이브의 번호를 메모리에 저장
+
 	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	; 화면을 모두 지우고, 속성값을 녹색으로 설정
 	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -76,10 +78,25 @@ RESETDISK:								; 디스크를 리셋하는 코드의 시작
 	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	; 서비스 번호 0, 드라이브 번호(0=Floppy)
 	mov ax, 0
-	mov dl, 0
+	mov dl, byte [ BOOTDRIVE ]
 	int 0x13
 	; 에러가 발생하면 에러 처리로 이동
 	jc	HANDLEDISKERROR
+
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	; 디스크 파라미터를 읽음
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	mov		ah, 0x08					; BIOS 서비스 번호 8(Read Disk Parameters)
+	mov		dl, byte [ BOOTDRIVE ]		; 읽을 드라이브 번호(USB Flash Drive) 설정
+	int		0x13						; 인터럽트 서비스 수행
+	jc		HANDLEDISKERROR				; 에러가 발생헀다면 HANDLEDISKERROR로 이동
+
+	mov		byte [ LASTHEAD ], dh		; 헤드 정보를 메모리에 저장
+	mov		al, cl						; 섹터와 트랙 정보를 AL 레지스터에 저장
+	and		al, 0x3f					; 섹터 정보(하위 6비트)를 추출하여
+										; AL 레지스터에 저장
+	mov		byte [ LASTSECTOR ], al		; 섹터 정보를 메모리에 저장
+	mov		byte [ LASTTRACK ], ch		; 트랙 정보 중에서 하위 8비트를 메모리에 저장
 
 	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	; 디스크에서 섹터를 읽음
@@ -109,7 +126,7 @@ READDATA:
 	mov ch, byte [ TRACKNUMBER ]		; 읽을 트랙 번호 설정
 	mov cl, byte [ SECTORNUMBER ]		; 읽을 섹터 번호 설정
 	mov dh, byte [ HEADNUMBER ]			; 읽을 헤더 번호 설정
-	mov dl, 0x00						; 읽을 드라이브 번호(0=Floppy) 설정
+	mov dl, byte [ BOOTDRIVE ]			; 읽을 드라이브 번호(0=Floppy) 설정
 	int 0x13							; 인터럽트 서비스 수행
 	jc HANDLEDISKERROR					; 에러가 발생했다면 HANDLEDISKERROR로 이동
 	
@@ -125,22 +142,25 @@ READDATA:
 	mov al, byte [ SECTORNUMBER ]		; 섹터 번호를 AL 레지스터에 설정
 	add al, 0x01						; 섹터 번호를 1 증가
 	mov byte [ SECTORNUMBER ], al		; 증가시킨 섹터 번호를 SECTORNUMBER에 다시 설정
-	cmp al, 19							; 증가시킨 섹터 번호를 19와 비교
-	jl READDATA							; 섹터 번호가 19 미만이라면 READDATA로 이동
+	cmp al, byte [ LASTSECTOR ]			; 증가시킨 섹터 번호를 마지막 섹터 번호와 비교
+	jle READDATA						; 섹터 번호가 마지막 섹터 이하라면 READDATA로 이동
 
-	; 마지막 섹터까지 읽었으면(섹터 번호가 19이면) 헤드를 토글(0->1, 1->0)하고,
-	; 섹터 번호를 1로 설정
-	xor byte [ HEADNUMBER ], 0x01		; 헤드 번호를 0x01과 XOR하여 토글(0->1, 1->1)
+	; 마지막 섹터까지 읽었으면 헤드를 증가시키고, 섹터 번호를 1로 설정
+	add byte [ HEADNUMBER ], 0x01		; 헤드 번호를 1 증가
 	mov byte [ SECTORNUMBER ], 0x01		; 섹터 번호를 다시 1로 설정
 
-	; 만약 헤드가 1->0로 바뀌었으면 양쪽 헤드를 모두 읽은 것이므로 아래로 이동하여
-	; 트랙 번호를 1증가
-	cmp byte [ HEADNUMBER ], 0x00		; 헤드 번호를 0x00과 비교
-	jne READDATA						; 헤드 번호가 0이 아니면 READDATA로 이동
+	; 만약 헤드를 모두 읽었으면 트랙 번호를 1 증가
+	mov al, byte [ LASTHEAD ]			; 마지막 헤드 번호를 AL 레지스터에 설정
+	cmp byte [ HEADNUMBER ], al			; 헤드 번호를 마지막 헤드 번호와 비교하고
+	jg .ADDTRACK						; 마지막 헤드 번호보다 크면 트랙 번호를 1증가
+	jmp READDATA						; READDATA로 이동
 
+.ADDTRACK:
 	; 트랙을 1 증가시킨 후 다시 섹터 읽기로 이동
+	mov byte [ HEADNUMBER ], 0x00		; 헤드 번호를 0으로 설정
 	add byte [ TRACKNUMBER ], 0x01		; 트랙 번호를 1 증가
 	jmp READDATA						; READDATA로 이동
+
 READEND:
 
 	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -270,7 +290,7 @@ PRINTMESSAGE:
 
 	jmp .MESSAGELOOP			; 메시지 출력 루프로 이동하여 다음 문자를 출력
 
-.MESSAGEEND
+.MESSAGEEND:
 	pop dx					; 함수에서 사용이 끝난 DX 레지스터부터 ES 레지스터까지 스택에
 	pop cx					; 삽입된 값을 이용해서 복원
 	pop ax					; 스택은 가장 마지막에 들어간 데이터가 가장 먼저 나오는
@@ -284,19 +304,30 @@ PRINTMESSAGE:
 ;	데이터 영역
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; 부트 로더 시작 메시지
-MESSAGE1:	db 'MINT64 OS Boot Loader Start~!!', 0	; 출력할 메시지 정의
+MESSAGE1:				db 0
+DISKERRORMESSAGE:		db	'DISK Error~!!', 0
+IMAGELOADINGMESSAGE:	db	0
+LOADINGCOMPLETEMESSAGE: db	0
+CHANGEGRAPHICMODEFAIL:	db	0
+
+;MESSAGE1:	db 'MINT64 OS Boot Loader Start~!!', 0	; 출력할 메시지 정의
 													; 마지막은 0으로 설정하여 .MESSAGELOOP에서
 													; 문자열이 종료되었음을 알 수 있도록 함
-
-DISKERRORMESSAGE:		db	'DISK Error~!!', 0
-IMAGELOADINGMESSAGE:	db	'OS Image Loading...', 0
-LOADINGCOMPLETEMESSAGE: db	'Complete~!!', 0
-CHANGEGRAPHICMODEFAIL:	db	'Change Graphic Mode Fail~!!', 0
+;DISKERRORMESSAGE:		db	'DISK Error~!!', 0
+;IMAGELOADINGMESSAGE:	db	'OS Image Loading...', 0
+;LOADINGCOMPLETEMESSAGE: db	'Complete~!!', 0
+;CHANGEGRAPHICMODEFAIL:	db	'Change Graphic Mode Fail~!!', 0
 
 ; 디스크 읽기에 관련된 변수들
 SECTORNUMBER:			db 	0x02		; OS 이미지가 시작하는 섹터 번호를 저장하는 영역
 HEADNUMBER:				db 	0x00		; OS 이미지가 시작하는 헤드 번호를 저장하는 영역
 TRACKNUMBER:			db 	0x00		; OS 이미지가 시작하는 트랙 번호를 저장하는 영역
+
+; 디스크 파라미터에 관련된 변수들
+BOOTDRIVE:				db 0x00			; 부팅한 드라이브의 번호를 저장하는 영역 
+LASTSECTOR:				db 0x00			; 드라이브의 마지막 섹터 번호 -1을 저장하는 영역
+LASTHEAD:				db 0x00			; 드라이브의 마지막 헤드 번호를 저장하는 영역
+LASTTRACK:				db 0x00			; 드라이브의 마지막 트랙 번호를 저장하는 영역
 
 times 510 - ( $ - $$ )  db  0x00		; $: 현재 라인의 어드레스
 										; $$: 현재 섹션(.text)의 시작 어드레스
