@@ -55,6 +55,7 @@ SHELLCOMMANDENTRY gs_vstCommandTable[] =
     { "vbemodeinfo", "Show VBE Mode Information", kShowVBEModeInfo },
     { "testsystemcall", "Test System Call Operation", kTestSystemCall },
     { "exec", "Execute Application Program, ex) exec a.elf argument", kExecuteApplicationProgram },
+    { "installpackage", "Install Package To HDD", kInstallPackage },
 };
 
 //==============================================================================
@@ -1533,4 +1534,77 @@ static void kExecuteApplicationProgram( const char* pcParameterBuffer )
     // 태스크 생성
     qwID = kExecuteProgram( vcFileName, vcArgumentString, TASK_LOADBALANCINGID );
     kPrintf( "Task ID = 0x%Q\n", qwID );
+}
+
+//  패키지에 들어 있는 데이터를 하드 디스크에 복사
+static void kInstallPackage( const char* pcParameterBuffer )
+{
+    PACKAGEHEADER* pstHeader;
+    PACKAGEITEM* pstItem;
+    WORD wKernelTotalSectorCount;
+    int i;
+    FILE* fp;
+    QWORD qwDataAddress;
+
+    kPrintf( "Package Install Start...\n" );
+
+    // 부트 로더가 로딩된 0x7C05 어드레스에서 보호 모드 커널과 IA-32e 모드 커널을 합한
+    // 섹터 수를 읽음
+    wKernelTotalSectorCount = *( ( WORD* ) 0x7C05 );
+
+    // 디스크 이미지는 0x10000 어드레스에 로딩되므로 이를 기준으로
+    // 커널 섹터 수만큼 떨어진 곳에 패키지 헤더가 있음
+    pstHeader = ( PACKAGEHEADER* ) ( ( QWORD ) 0x10000 + wKernelTotalSectorCount * 512 );
+
+    // 시그니처를 확인
+    if( kMemCmp( pstHeader->vcSignature, PACKAGESIGNATURE, sizeof( pstHeader->vcSignature ) ) != 0 )
+    {
+        kPrintf( "Package Signature Fail\n" );
+        return ;
+    }
+
+    //------------------------------------------------------------------------------
+    // 패키지 내의 모든 파일을 찾아서 하드 디스크에 복사
+    //------------------------------------------------------------------------------
+    // 패키지 데이터가 시작하는 어드레스
+    qwDataAddress = ( QWORD ) pstHeader + pstHeader->dwHeaderSize;
+    // 패키지 헤더의 첫 번째 파일 데이터
+    pstItem = pstHeader->vstItem;
+
+    // 패키지에 포함된 모든 파일을 찾아서 복사
+    for( i = 0 ; i < pstHeader->dwHeaderSize / sizeof( PACKAGEITEM ) ; i++ )
+    {
+        kPrintf( "[%d] file: %s, size: %d Byte\n", i + 1, pstItem[ i ].vcFileName, pstItem[ i ].dwFileLength );
+
+        // 패키지에 포함된 파일 이름으로 파일을 생성
+        fp = fopen( pstItem[ i ].vcFileName, "w" );
+        if( fp == NULL )
+        {
+            kPrintf( "%s File Create Fail\n" );
+            return ;
+        }
+
+        // 패키지 데이터 부분에 포함된 파일 내용을 하드 디스크로 복사
+        if( fwrite( ( BYTE* ) qwDataAddress, 1, pstItem[ i ].dwFileLength, fp ) != pstItem[ i ].dwFileLength )
+        {
+            kPrintf( "Write Fail\n" );
+
+            // 파일을 닫고 파일 시스템 캐시를 내보냄
+            fclose( fp );
+            kFlushFileSystemCache();
+
+            return ;
+        }
+
+        // 파일을 닫음
+        fclose( fp );
+
+        // 다음 파일이 저장된 위치로 이동
+        qwDataAddress += pstItem[ i ].dwFileLength;
+    }
+
+    kPrintf( "Package Install Complete\n" );
+
+    // 파일 시스템 캐시를 내보냄
+    kFlushFileSystemCache();
 }

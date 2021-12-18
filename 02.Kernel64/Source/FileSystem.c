@@ -707,7 +707,7 @@ static BOOL kSetDirectoryEntryData( int iIndex, DIRECTORYENTRY* pstEntry )
     // 루트 디렉터리를 읽음
     if( kReadCluster( 0, gs_vbTempBuffer ) == FALSE )
     {
-        return TRUE;
+        return FALSE;
     }
 
     // 루트 디렉터리에 있는 해당 데이터를 갱신
@@ -780,9 +780,9 @@ int kFindDirectoryEntry( const char* pcFileName, DIRECTORYENTRY* pstEntry )
 }
 
 // 파일 시스템의 정보를 반환
-void kGetFileSystemInformation( FILESYSTEMMANAGER* pstManger )
+void kGetFileSystemInformation( FILESYSTEMMANAGER* pstManager )
 {
-    kMemCpy( pstManger, &gs_stFileSystemManager, sizeof( gs_stFileSystemManager ) );
+    kMemCpy( pstManager, &gs_stFileSystemManager, sizeof( gs_stFileSystemManager ) );
 }
 
 //==============================================================================
@@ -1218,7 +1218,7 @@ DWORD kWriteFile( const void* pvBuffer, DWORD dwSize, DWORD dwCount, FILE* pstFi
 
     // 동기화
     kUnlock( &( gs_stFileSystemManager.stMutex ) );
-    return dwWriteCount;
+    return ( dwWriteCount / dwSize );
 }
 
 //  파일을 Count 만큼 0으로 채움
@@ -1667,7 +1667,7 @@ BOOL kFlushFileSystemCache( void )
     }
 
     // 동기화
-    kUnlock( &( gs_stFileSystemManager.stMutex ) );
+    kLock( &( gs_stFileSystemManager.stMutex ) );
 
     // 클러스터 링크 테이블 영역의 캐시 정보를 얻어서 내용이 변한 캐시 버퍼를 모두 디스크에 씀
     kGetCacheBufferAndCount( CACHE_CLUSTERLINKTABLEAREA, &pstCacheBuffer, &iCacheCount );

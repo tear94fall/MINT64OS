@@ -34,7 +34,7 @@ QWORD kExecuteProgram( const char* pcFileName, const char* pcArgumentString, BYT
         }
 
         // 파일 이름의 길이와 내용이 같은 것을 검색
-        if( ( kStrLen( pstEntry->d_name ) == kStrLen( pcFileName ) ) & ( kMemCmp( pstEntry->d_name, pcFileName, kStrLen( pcFileName ) ) == 0 ) )
+        if( ( kStrLen( pstEntry->d_name ) == kStrLen( pcFileName ) ) && ( kMemCmp( pstEntry->d_name, pcFileName, kStrLen( pcFileName ) ) == 0 ) )
         {
             dwFileSize = pstEntry->dwFileSize;
             break;
@@ -252,7 +252,7 @@ static BOOL kRelocation( BYTE* pbFileBuffer )
     //--------------------------------------------------------------------------------------------
     // 모든 섹션 헤더를 검색하여 SHT_REL 또는 SHT_RELA 타입을 가지는 섹션을 찾아 재배치를 수행
     //--------------------------------------------------------------------------------------------
-    for( i = 0 ; i < pstELFHeader->e_shnum ; i++ )
+    for( i = 1 ; i < pstELFHeader->e_shnum ; i++ )
     {
         if( ( pstSectionHeader[ i ].sh_type != SHT_RELA ) && ( pstSectionHeader[ i ].sh_type != SHT_REL ) )
         {

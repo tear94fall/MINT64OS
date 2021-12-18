@@ -73,7 +73,7 @@ typedef struct kPartitionStruct
     // 부팅 가능 플래그, 0x80이면 부팅 가능을 나타내면 0x00은 부팅 불가
     BYTE bBootableFlag;
     // 파티션의 시작 어드레스, 현재는 거의 사용하지 않으며 아래의 LBA 어드레스를 대신 사용
-    BYTE vbStringCHSAddress[ 3 ];
+    BYTE vbStartingCHSAddress[ 3 ];
     // 파티션 타입
     BYTE bPartitionType;
     // 파티션의 마지막 어드레스, 현재는 거의 사용 안 함
